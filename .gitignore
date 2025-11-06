@@ -1,0 +1,11 @@
+**/Dataset
+**/Annotations
+**/Data
+
+**/**audio
+**/**frames
+
+**/.venv
+**/.vscode
+
+**.pt
