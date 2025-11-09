@@ -13,7 +13,7 @@ from transformers import AutoTokenizer
 
 
 class ACL(nn.Module):
-    def __init__(self, conf_file: str, device: str):
+    def __init__(self, conf_file: str, device: str, model_path: str):
         """
         Audio-Grounded Contrastive Learning (ACL) model.
 
@@ -39,14 +39,17 @@ class ACL(nn.Module):
         self.audio_backbone = BEATs(cfg)
 
         # Text Tokenizer for placeholder prompt
-        self.tokenizer = AutoTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        # self.tokenizer = AutoTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
+        local_model_path = model_path + "/clipseg-rd64-refined-local"
+        self.tokenizer = AutoTokenizer.from_pretrained(local_model_path)
 
         # Init audio projection layer
         self.audio_proj = FGAEmbedder(input_size=self.args.audio_proj.input_size * 3,
                                       output_size=self.args.audio_proj.output_size)
 
         # Init audio-visual grounder (Grounder: CLIPSeg)
-        self.av_grounder = CLIPSeg.from_pretrained("CIDAS/clipseg-rd64-refined")
+        # self.av_grounder = CLIPSeg.from_pretrained("CIDAS/clipseg-rd64-refined")
+        self.av_grounder = CLIPSeg.from_pretrained(local_model_path)
 
         # Init maskers
         self.masker_i = ImageMasker(10.0, 14.0, 1.0)

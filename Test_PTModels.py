@@ -32,23 +32,26 @@ def main(
     """
 
     USE_CUDA = torch.cuda.is_available()
-    print(f'torch.cuda.is_available() is: {torch.cuda.is_available()}END\n')
-    print(f'torch.cuda.device_count() is {torch.cuda.device_count()}END\n')
+
+    print(f'torch.cuda.is_available() is: {torch.cuda.is_available()}')
+    print(f'torch.cuda.device_count() is {torch.cuda.device_count()}')
+    
     device = torch.device('cuda:0' if USE_CUDA else 'cpu')
 
     model_exp_name = f'{model_name}_{exp_name}' if exp_name != "" else model_name
 
     print(f"Exp_name: {model_exp_name}")
 
-    for epoch in epochs:
+    for epoch in epochs: # pyright: ignore[reportGeneralTypeIssues]
         # Get model
         model_conf_file = f'./config/model/{model_name}.yaml'
-        model = ACL(model_conf_file, device)
+        model = ACL(model_conf_file, device, model_path)
         model.train(False)
 
         # Load model
         postfix = str(epoch) if epoch is not None else 'best'
-        model_dir = os.path.join(model_path, 'Train_record', model_exp_name, f'Param_{postfix}.pth')
+        # model_dir = os.path.join(model_path, 'Train_record', model_exp_name, f'Param_{postfix}.pth')
+        model_dir = os.path.join(model_path, model_exp_name, f'Param_{postfix}.pth')
         model.load(model_dir)
 
         # Set directory
