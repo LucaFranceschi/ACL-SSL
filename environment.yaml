@@ -1,4 +1,4 @@
-name: acl_ssl27
+name: acl-ssl
 channels:
   - conda-forge
   - bioconda
@@ -89,4 +89,4 @@ dependencies:
       - typing-extensions==4.15.0
       - urllib3==2.5.0
       - werkzeug==3.1.3
-prefix: /data/upftfg27/lfranceschi/.conda/envs/acl_ssl27
+prefix: /data/upftfg27/lfranceschi/.conda/envs/acl-ssl
