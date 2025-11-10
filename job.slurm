@@ -10,7 +10,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=luca.franceschi01@estudiant.upf.edu
 
-# ###      #asdfasdf SBITCH --gres=gpu:2
+# NOPE #SBATCH --gres=gpu:2
 
 env_name="acl_ssl27"
 
@@ -27,3 +27,4 @@ cd $SCRATCH/ACL-SSL
 # srun Test_PTModels.sh
 
 # copiar resultados a $DATA?
+rsync -avz Visual_results $DATA

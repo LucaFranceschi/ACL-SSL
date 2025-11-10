@@ -5,17 +5,13 @@
 set -euo pipefail
 
 module load conda
-# module load cuda/11.8
+
 conda create -y -n acl_ssl27
 conda activate acl_ssl27
 
 conda install -y cudatoolkit
-# conda install -y -c nvidia cudatoolkit=11.8
-# conda install nvidia/label/cuda-11.8.0::cuda-nvrtc
-# conda install nvidia/label/cuda-11.8.0::cuda-libraries
 conda install -y -c conda-forge cudnn
 conda install -y python=3.10
-# pip install cuda-toolkit
 pip install torch==2.0.0+cu118 torchvision==0.15.0+cu118 torchaudio==2.0.0 numpy==1.24.1 --extra-index-url https://download.pytorch.org/whl/cu118
 pip install tensorboard==2.11.2
 pip install transformers==4.25.1

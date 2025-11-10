@@ -4,3 +4,5 @@
 .git
 outputs
 pretrain
+Visual_results
+myutils
