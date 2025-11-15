@@ -41,7 +41,7 @@ class ACL(nn.Module):
         # Text Tokenizer for placeholder prompt
         # self.tokenizer = AutoTokenizer.from_pretrained("CIDAS/clipseg-rd64-refined")
         local_model_path = model_path + "/clipseg-rd64-refined-local"
-        self.tokenizer = AutoTokenizer.from_pretrained(local_model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(local_model_path, use_fast=False)
 
         # Init audio projection layer
         self.audio_proj = FGAEmbedder(input_size=self.args.audio_proj.input_size * 3,
