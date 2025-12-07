@@ -48,7 +48,9 @@ class AVSBenchDataset(Dataset):
 
         ''' Available files'''
         subset = set([item[0] for item in csv.reader(open(self.csv_dir))])
+        print(self.csv_dir, len(subset), len(image_files))
         self.file_list = sorted(list(image_files.intersection(subset)))
+        print(len(self.file_list))
 
         ''' Transform '''
         if is_train:

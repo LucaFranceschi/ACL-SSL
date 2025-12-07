@@ -2,11 +2,18 @@
 **/Annotations
 **/Data
 
-**/**audio
-**/**frames
+**/audio
+**/extend_audio
+**/frames
+**/extend_frames
 
 **/.venv
 **/.vscode
 
 pretrain
 Visual_results
+
+**/AVS1
+
+s4_data
+ms3_data

@@ -99,6 +99,7 @@ def eval_vggss_agg(
             draw_overlaid(result_dir, original_image, heatmap_image, name[j])
 
     # Save result
+    os.makedirs(result_dir, exist_ok=True)
     rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
     msg = ''
 
@@ -204,7 +205,8 @@ def eval_avsbench_agg(
             draw_overlaid(result_dir, original_image, heatmap_image, name[j])
 
     # Save result
-    rst_path = os.path.join(f'{result_dir}', 'test_rst.txt')
+    os.makedirs(result_dir, exist_ok=True)
+    rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
     msg = ''
 
     # Final result
@@ -300,6 +302,7 @@ def eval_flickr_agg(
             draw_overlaid(result_dir, original_image, heatmap_image, name[j])
 
     # Save result
+    os.makedirs(result_dir, exist_ok=True)
     rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
     msg = ''
 

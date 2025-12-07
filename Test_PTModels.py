@@ -35,7 +35,7 @@ def main(
 
     print(f'torch.cuda.is_available() is: {torch.cuda.is_available()}')
     print(f'torch.cuda.device_count() is {torch.cuda.device_count()}')
-    
+
     device = torch.device('cuda:0' if USE_CUDA else 'cpu')
 
     model_exp_name = f'{model_name}_{exp_name}' if exp_name != "" else model_name
@@ -75,21 +75,23 @@ def main(
         vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=1, shuffle=False, num_workers=1,
                                                        pin_memory=True, drop_last=False)
 
-        # avss4_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_s4_test', is_train=False, input_resolution=352)
-        # avss4_dataloader = torch.utils.data.DataLoader(avss4_dataset, batch_size=5, shuffle=False, num_workers=1,
-        #                                                pin_memory=True, drop_last=False)
+        avss4_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_s4_test', is_train=False, input_resolution=352)
+        print(len(avss4_dataset))
+        avss4_dataloader = torch.utils.data.DataLoader(avss4_dataset, batch_size=5, shuffle=False, num_workers=1,
+                                                       pin_memory=True, drop_last=False)
 
-        # avsms3_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_ms3_test', is_train=False, input_resolution=352)
-        # avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=5, shuffle=False, num_workers=1,
-        #                                                 pin_memory=True, drop_last=False)
+        avsms3_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_ms3_test', is_train=False, input_resolution=352)
+        print(len(avsms3_dataset))
+        avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=5, shuffle=False, num_workers=1,
+                                                        pin_memory=True, drop_last=False)
 
         # Evaluate
         eval_exflickr_agg(model, exflickr_dataloader, viz_dir_template.format('exflickr'))
         eval_exvggss_agg(model, exvggss_dataloader, viz_dir_template.format('exvggss'))
         eval_flickr_agg(model, flickr_dataloader, viz_dir_template.format('flickr'), tensorboard_path=tensorboard_path)
         eval_vggss_agg(model, vggss_dataloader, viz_dir_template.format('vggss'), tensorboard_path=tensorboard_path)
-        # eval_avsbench_agg(model, avss4_dataloader, viz_dir_template.format('s4'), tensorboard_path=tensorboard_path)
-        # eval_avsbench_agg(model, avsms3_dataloader, viz_dir_template.format('ms3'), tensorboard_path=tensorboard_path)
+        eval_avsbench_agg(model, avss4_dataloader, viz_dir_template.format('s4'), tensorboard_path=tensorboard_path)
+        eval_avsbench_agg(model, avsms3_dataloader, viz_dir_template.format('ms3'), tensorboard_path=tensorboard_path)
 
 
 if __name__ == "__main__":
