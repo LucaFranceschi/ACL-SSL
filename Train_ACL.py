@@ -23,6 +23,61 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 
+import numpy as np
+
+def compute_validation_loss(module, dataloader, args, autocast_fn):
+    """
+    Computes the average loss over a validation dataset.
+    """
+    # module.train(False) # already done before call
+
+    loss_dict = {}
+    loss_per_epoch_dict = {loss_name: 0.0 for loss_name in args.loss}
+    total_loss_per_epopch = 0.0
+    loss_add_count = 0.0
+
+    module.train(True)
+
+    # with torch.no_grad():  # already done before call
+    for step, data in enumerate(dataloader):
+        images, audios, labels = data['images'], data['audios'], data['labels']
+
+        if USE_CUDA:
+            images = images.half()
+
+        prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
+
+        with autocast_fn():
+            # Train step
+            placeholder_tokens = module.get_placeholder_token(prompt_template.replace('{}', ''))
+            placeholder_tokens = placeholder_tokens.repeat((dataloader.batch_size, 1))
+            audio_driven_embedding = module.encode_audio(audios.to(module.device), placeholder_tokens,
+                                                            text_pos_at_prompt, prompt_length)
+
+            if USE_CUDA:
+                audio_driven_embedding = audio_driven_embedding.half()
+
+            out_dict = module(images.to(module.device), audio_driven_embedding, 352)
+
+            loss_args = {'pred_emb': audio_driven_embedding, **out_dict}
+
+            for j, loss_name in enumerate(args.loss):
+                loss_dict[loss_name] = getattr(import_module('loss_utils'), loss_name)(**loss_args) * args.loss_w[j]
+
+            loss = torch.sum(torch.stack(list(loss_dict.values())))
+
+            if torch.isnan(loss) or torch.isinf(loss):
+                # skip if loss is nan
+                print('************Training stopped due to inf/nan loss.************')
+                sys.exit(-1)
+
+        total_loss_per_epopch += loss.item()
+        loss_add_count += 1.0
+
+    module.train(False)
+
+    return total_loss_per_epopch / loss_add_count
+
 
 def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path):
     """
@@ -38,16 +93,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     Returns:
         None
     """
-    USE_CUDA = torch.cuda.is_available()
 
-    # Check the number of GPUs for training
-    num_gpus = len(os.environ.get('CUDA_VISIBLE_DEVICES', '').split(','))
-    use_ddp = True if num_gpus > 1 else False
-
-    rank = 0 if not use_ddp else None
-
-    if use_ddp:
+    if USE_DDP:
         dist.init_process_group("nccl", timeout=datetime.timedelta(seconds=9000))
+        global rank
         rank = dist.get_rank()
         torch.cuda.set_device(rank)
         world_size = dist.get_world_size()
@@ -107,7 +156,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                       input_resolution=args.input_resolution)
 
     ''' Create DistributedSampler '''
-    sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True) if use_ddp else None
+    sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True) if USE_DDP else None
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, sampler=sampler,
                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
@@ -116,13 +165,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     # Get Test Dataloader (VGGSS)
     vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test_30', is_train=False,
                                  input_resolution=args.input_resolution)
-    vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=False)
+    vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                   pin_memory=False, drop_last=True)
 
     train_dataset_for_testing_overfitting = VGGSSDataset(data_path_dict['vggss'], 'vggss_test_100', is_train=False,
                                      input_resolution=args.input_resolution)
-    vggss_dataloader_for_testing_overfitting = torch.utils.data.DataLoader(train_dataset_for_testing_overfitting, batch_size=1, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=False)
+    vggss_dataloader_for_testing_overfitting = torch.utils.data.DataLoader(train_dataset_for_testing_overfitting, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                   pin_memory=False, drop_last=True)
 
     if args.train_data == 'vggss_heard':
         # Get Test Dataloader (VGGSS)
@@ -187,10 +236,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         autocast_fn, scaler = nullcontext, None
 
     ''' Make distributed data parallel module '''
-    model = DistributedDataParallel(model, device_ids=[device], output_device=device) if use_ddp else model
+    model = DistributedDataParallel(model, device_ids=[device], output_device=device) if USE_DDP else model
     module = model.module if isinstance(model, DistributedDataParallel) else model
 
     best_pth_dict = {'epoch': 0, 'best_AUC': 0.0}
+
+    validation_loss_list = []
+    train_loss_list = []
 
     ''' Train Loop '''
     for epoch in range(args.epoch):
@@ -206,9 +258,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             train_start_time_per_epoch = time.time()
 
         pbar = tqdm(train_dataloader, desc=f"Train Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
-        sampler.set_epoch(epoch) if use_ddp else None
+        sampler.set_epoch(epoch) if USE_DDP else None
         for step, data in enumerate(pbar):
-            print('one pass in this for loop over pbar')
             images, audios, labels = data['images'], data['audios'], data['labels']
 
             if USE_CUDA:
@@ -263,7 +314,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             if rank == 0:
                 pbar.set_description(f"Training Epoch {epoch}, Loss = {round(avr_loss, 5)}")
 
-        if use_ddp:
+        if rank == 0:
+            train_loss_list.append(avr_loss)
+
+        if USE_DDP:
             dist.barrier()
 
         if rank == 0:
@@ -280,6 +334,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             module.train(False)
 
             with torch.no_grad():
+                avr_loss_val = compute_validation_loss(module, vggss_dataloader, args, autocast_fn)
+                validation_loss_list.append(avr_loss_val)
+
+                if rank == 0:
+                    print(f"Training Epoch {epoch}, Loss (train) = {round(avr_loss, 5)}, Loss (val) = {round(avr_loss_val, 5)}")
+
                 viz_dir_template = os.path.join(save_path, 'Visual_results', '{}', model_exp_name, f'epoch{epoch}')
 
                 if args.train_data == 'vggss_heard':
@@ -318,7 +378,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         print("Training time :", result_list[0])
         print(f"Best epoch: {best_pth_dict['epoch']}")
 
-    dist.destroy_process_group() if use_ddp else None
+        with open(os.path.join(save_path, 'Train_record', model_exp_name, 'train_losses'), 'wb') as f:
+            np.array(train_loss_list).dump(f)
+
+        with open(os.path.join(save_path, 'Train_record', model_exp_name, 'validation_losses'), 'wb') as f:
+            np.array(validation_loss_list).dump(f)
+
+    dist.destroy_process_group() if USE_DDP else None
 
 
 if __name__ == "__main__":
@@ -337,6 +403,14 @@ if __name__ == "__main__":
     data_path = {'vggss': args.vggss_path,
                  'flickr': args.flickr_path,
                  'avs': args.avs_path}
+
+    USE_CUDA = torch.cuda.is_available()
+
+    # Check the number of GPUs for training
+    NUM_GPUS = len(os.environ.get('CUDA_VISIBLE_DEVICES', '').split(','))
+    USE_DDP = True if NUM_GPUS > 1 else False
+
+    rank = 0 if not USE_DDP else None
 
     # Run example
     main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path)

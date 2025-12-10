@@ -25,4 +25,4 @@ cd $SCRATCH/ACL-SSL
 ./SingleGPU_Experiment.sh
 
 rsync -avz Visual_results $DATA
-rsync -avz Train_results $DATA
+rsync -avz Train_record $DATA
