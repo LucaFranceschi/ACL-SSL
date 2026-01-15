@@ -20,3 +20,6 @@ s4_data
 ms3_data
 
 vggsound*.csv
+
+*.out
+*.err
