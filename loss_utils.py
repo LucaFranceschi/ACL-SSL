@@ -70,9 +70,25 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
         torch.Tensor: Feature-level ACL loss
     '''
     B, _, C = v_f.size()
-    logits = torch.einsum('bnc,bc ->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
+
+    logits = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
+
+    if kwargs.get('san_active', False):
+        neg_audios = kwargs.get('neg_audios', None)
+        if neg_audios != None:
+            sil_audio, noise_audio = neg_audios.split(1, dim=0) # each one [1, 512] (1, C)
+
+            sil_audio = F.normalize(sil_audio).repeat(B, 1)
+            noise_audio = F.normalize(noise_audio).repeat(B, 1)
+
+            # from bn average to have bx1
+            sil_sim = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), sil_audio).mean(dim=1, keepdim=True)
+            noise_sim = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), noise_audio).mean(dim=1, keepdim=True)
+
+            logits = torch.cat((logits, sil_sim, noise_sim), dim=1)
 
     labels = torch.arange(B).long().to(pred_emb.device)
-    loss = 0.5 * (F.cross_entropy(logits * beta, labels) + F.cross_entropy(logits.T * beta, labels))
+
+    loss = 0.5 * (F.cross_entropy(logits * beta, labels) + F.cross_entropy(logits[:, :B].T * beta, labels))
 
     return loss

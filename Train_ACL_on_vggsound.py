@@ -26,7 +26,25 @@ from torch.utils.data.distributed import DistributedSampler
 
 import numpy as np
 
-def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path):
+import gc
+
+def get_silence_noise_audios(module, train_dataset):
+
+    first_audio = train_dataset[0]['audios']
+    negative_audios = torch.stack((torch.zeros_like(first_audio),
+                                 torch.clip(torch.randn(first_audio.shape), min=-1., max=1.)), dim=0)
+
+    prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
+    placeholder_tokens = module.get_placeholder_token(prompt_template.replace('{}', ''))
+    placeholder_tokens = placeholder_tokens.repeat((2, 1))
+
+    with torch.no_grad():
+        neg_audios_embedded = module.encode_audio(negative_audios.to(module.device),
+                                                  placeholder_tokens, text_pos_at_prompt, prompt_length)
+
+    return neg_audios_embedded.detach() # torch.Size([2, 512])
+
+def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path, san_active):
     """
     Main function for training an image compression model.
 
@@ -86,10 +104,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     ''' Get dataloader '''
     # Get Train Dataloader (VGGSS)
     print(data_path_dict['vggsound'])
-    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train', is_train=True,
+    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train_subset', is_train=True,
                                     input_resolution=args.input_resolution)
 
-    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test', is_train=False,
+    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test_subset', is_train=False,
                                     input_resolution=args.input_resolution)
 
     ''' Create DistributedSampler '''
@@ -182,6 +200,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     validation_loss_list = []
     train_loss_list = []
 
+    neg_audios = get_silence_noise_audios(module, train_dataset)
+
+    if USE_CUDA:
+        neg_audios = neg_audios.half()
+
+    san_dict = {'san_active': san_active, 'neg_audios': neg_audios}
+
     ''' Train Loop '''
     for epoch in range(args.epoch):
         module.train(True)
@@ -217,21 +242,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
                 out_dict = module(images.to(module.device), audio_driven_embedding, 352)
 
-                loss_args = {'pred_emb': audio_driven_embedding, **out_dict}
+                loss_args = {'pred_emb': audio_driven_embedding, **san_dict, **out_dict}
 
                 for j, loss_name in enumerate(args.loss):
                     loss_dict[loss_name] = getattr(import_module('loss_utils'), loss_name)(**loss_args) * args.loss_w[j]
                     loss_per_epoch_dict[loss_name] += loss_dict[loss_name]
                 loss = torch.sum(torch.stack(list(loss_dict.values())))
-
-                if rank == 0:
-                    if torch.isnan(loss) or torch.isinf(loss):
-                        # skip if loss is nan
-                        print('************Training stopped due to inf/nan loss.************')
-                        sys.exit(-1)
-
-                extra_loss = 0
-                loss += extra_loss
 
             total_loss_per_epopch += loss.item()
             loss_add_count += 1.0
@@ -252,15 +268,23 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             if rank == 0:
                 pbar.set_description(f"Training Epoch {epoch}, Loss = {round(avr_loss, 5)}")
 
+            # for obj in gc.get_objects():
+            #     try:
+            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+            #             print(type(obj), obj.size())
+            #     except:
+            #         pass
+
+            # print(gc.get_stats())
+
         if rank == 0:
-            train_loss_list.append(avr_loss)
+            train_loss_list.append(float(avr_loss))
 
         if USE_DDP:
             dist.barrier()
 
         viz_dir_template = os.path.join(save_path, 'Visual_results', '{}', model_exp_name, f'epoch{epoch}')
 
-        # avr_loss_val = compute_validation_loss(module, validation_dataloader, args, autocast_fn)
         avr_loss_val = eval_vggsound_validation(module, validation_dataloader, args, viz_dir_template.format('vggsound_val'),
                                         epoch, tensorboard_path=tensorboard_path, rank=rank)
         validation_loss_list.append(avr_loss_val)
@@ -283,32 +307,46 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                     print(f"Training Epoch {epoch}, Loss (train) = {round(avr_loss, 5)}, Loss (val) = {round(avr_loss_val, 5)}")
 
                     if args.train_data == 'vggss_heard':
-                        result_dict = eval_vggss_agg(module, heard_dataloader, viz_dir_template.format('vggss_heard'),
-                                                    epoch, tensorboard_path=tensorboard_path)
-                        eval_vggss_agg(module, unheard_dataloader, viz_dir_template.format('vggss_unheard'), epoch,
-                                    tensorboard_path=tensorboard_path)
+                        # result_dict = eval_vggss_agg(module, heard_dataloader, viz_dir_template.format('vggss_heard'),
+                        #                             epoch, tensorboard_path=tensorboard_path)
+                        # eval_vggss_agg(module, unheard_dataloader, viz_dir_template.format('vggss_unheard'), epoch,
+                        #             tensorboard_path=tensorboard_path)
+                        pass
                     else:
-                        result_dict = eval_vggss_agg(module, vggss_dataloader, viz_dir_template.format('vggss'), epoch,
-                                                    tensorboard_path=tensorboard_path)
-                        eval_flickr_agg(module, flickr_dataloader, viz_dir_template.format('flickr'), epoch,
-                                        tensorboard_path=tensorboard_path)
-                        eval_avsbench_agg(module, avss4_dataloader, viz_dir_template.format('s4'), epoch,
-                                        tensorboard_path=tensorboard_path)
-                        eval_avsbench_agg(module, avsms3_dataloader, viz_dir_template.format('ms3'), epoch,
-                                        tensorboard_path=tensorboard_path)
-                        eval_exvggss_agg(module, exvggss_dataloader, viz_dir_template.format('exvggss'), epoch,
-                                        tensorboard_path=tensorboard_path)
-                        eval_exflickr_agg(module, exflickr_dataloader, viz_dir_template.format('exflickr'), epoch,
-                                        tensorboard_path=tensorboard_path)
+                        # result_dict = eval_vggss_agg(module, vggss_dataloader, viz_dir_template.format('vggss'), epoch,
+                        #                             tensorboard_path=tensorboard_path)
+                        # eval_flickr_agg(module, flickr_dataloader, viz_dir_template.format('flickr'), epoch,
+                        #                 tensorboard_path=tensorboard_path)
+                        # eval_avsbench_agg(module, avss4_dataloader, viz_dir_template.format('s4'), epoch,
+                        #                 tensorboard_path=tensorboard_path)
+                        # eval_avsbench_agg(module, avsms3_dataloader, viz_dir_template.format('ms3'), epoch,
+                        #                 tensorboard_path=tensorboard_path)
+                        # eval_exvggss_agg(module, exvggss_dataloader, viz_dir_template.format('exvggss'), epoch,
+                        #                 tensorboard_path=tensorboard_path)
+                        # eval_exflickr_agg(module, exflickr_dataloader, viz_dir_template.format('exflickr'), epoch,
+                        #                 tensorboard_path=tensorboard_path)
+                        pass
 
-                save_dir = os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{str(epoch)}.pth')
-                module.save(save_dir)
+                # save_dir = os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{str(epoch)}.pth')
+                # module.save(save_dir)
 
-                if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
-                    best_pth_dict = result_dict
-                    shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
+                # if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
+                #     best_pth_dict = result_dict
+                #     shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
 
         module.train(True)
+
+        # if USE_CUDA:
+        #     torch.cuda.empty_cache()
+
+        # gc.collect()
+
+        # for obj in gc.get_objects():
+        #     try:
+        #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+        #             print(type(obj), obj.size())
+        #     except:
+        #         pass
 
     writer.close()
 
@@ -338,6 +376,7 @@ if __name__ == "__main__":
     parser.add_argument('--avs_path', type=str, default='', help='AVSBench dataset directory')
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
     parser.add_argument('--local-rank', type=str, default='', help='Rank for distributed train')
+    parser.add_argument('--san', action='store_true', help='Silence and noise implementation during training')
 
     args = parser.parse_args()
 
@@ -355,4 +394,4 @@ if __name__ == "__main__":
     rank = 0 if not USE_DDP else None
 
     # Run example
-    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path)
+    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path, args.san)

@@ -19,4 +19,5 @@ Train_ACL_on_vggsound.py \
 --flickr_path $DATA/Flickr \
 --avs_path $DATA/AVSBench/AVS1 \
 --vggsound_path $DATA/vggsound \
---save_path $DATA
+--save_path $DATA \
+--san
