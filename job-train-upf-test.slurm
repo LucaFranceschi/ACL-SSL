@@ -2,9 +2,7 @@
 
 #SBATCH --job-name=acl-train
 #SBATCH --ntasks-per-node 1
-#SBATCH --cpus-per-task 4
-#SBATCH --mem-per-cpu 8G
-#SBATCH --gres=gpu:2
+#SBATCH --cpus-per-task 1
 #SBATCH --output=outputs/slurm-%j.out
 #SBATCH --error=outputs/slurm-%j.err
 #SBATCH --time=2-00:00:00
@@ -24,7 +22,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/lfranceschi/.conda/envs/$env_name/
 
 # cd $SCRATCH/ACL-SSL
 
-./Distributed_Experiment.sh
+./SingleGPU_Experiment.sh
 
 # rsync -avz Visual_results $DATA
 # rsync -avz Train_record $DATA

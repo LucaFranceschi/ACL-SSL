@@ -108,7 +108,7 @@ def eval_vggsound_validation(
     if tensorboard_path is not None and epoch is not None:
         writer.close()
 
-    return total_loss_per_epopch / loss_add_count
+    return float(total_loss_per_epopch / loss_add_count)
 
 @torch.no_grad()
 def eval_vggss_agg(
