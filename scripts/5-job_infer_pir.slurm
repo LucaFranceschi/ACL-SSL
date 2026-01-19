@@ -24,6 +24,6 @@ rsync -avz --exclude-from=myutils/excluded-directories.txt ~/repos/ACL-SSL $SCRA
 
 cd $SCRATCH/ACL-SSL
 
-./4-test_PTModels.sh
+./scripts/4-test_PTModels.sh
 
 rsync -avz Visual_results $DATA

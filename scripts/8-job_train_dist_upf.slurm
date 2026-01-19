@@ -20,4 +20,4 @@ source activate $env_name
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/lfranceschi/.conda/envs/$env_name/lib
 
-./3-distributed_train.sh
+./scripts/3-distributed_train.sh

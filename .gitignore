@@ -22,3 +22,5 @@ ms3_data
 vggsound*.csv
 
 outputs/
+
+**tmp**

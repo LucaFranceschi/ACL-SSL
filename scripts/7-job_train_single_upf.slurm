@@ -20,4 +20,4 @@ source activate $env_name
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/lfranceschi/.conda/envs/$env_name/lib
 
-./2-single_gpu_train.sh
+./scripts/2-single_gpu_train.sh

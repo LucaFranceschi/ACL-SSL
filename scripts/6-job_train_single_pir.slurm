@@ -22,7 +22,7 @@ rsync -avz --exclude-from=myutils/excluded-directories.txt ~/repos/ACL-SSL $SCRA
 
 cd $SCRATCH/ACL-SSL
 
-./2-single_gpu_train.sh
+./scripts/2-single_gpu_train.sh
 
 rsync -avz Visual_results $DATA
 rsync -avz Train_record $DATA
