@@ -158,7 +158,7 @@ class AddRandomNoise(torch.nn.Module):
     .. properties:: Autograd TorchScript
     '''
 
-    def __init__(self, snr: torch.Tensor, lengths: Optional[torch.Tensor] = None):
+    def __init__(self, lengths: Optional[torch.Tensor] = None):
         r'''
         Args:
             snr (torch.Tensor): Signal-to-noise ratios in dB, with shape `(...,)`.
@@ -166,7 +166,8 @@ class AddRandomNoise(torch.nn.Module):
         '''
         super().__init__()
 
-        self.snr = snr
+        self.snr = torch.Tensor([1000.0]) # high value --> no noise initially
+        self.epoch = 0
         self.lengths = lengths
 
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
@@ -185,6 +186,10 @@ class AddRandomNoise(torch.nn.Module):
         noise = torch.clip(torch.randn(waveform.shape), min=-1., max=1.)
         noisy_waveform = add_noise(waveform, noise, self.snr, self.lengths)
         return noisy_waveform.squeeze(0)
+
+    def step(self, epoch, k=5):
+        self.epoch = epoch
+        self.snr = torch.Tensor([np.exp(-epoch/k + k) + k]) # negative exponential profile
 
 '''
 Useful implementation for randomly applying transforms :)
@@ -217,12 +222,18 @@ class RandomApply(torch.nn.Module):
         self.transforms = transforms
         self.p = p
 
-    def forward(self, tensor):
-        if self.p < torch.rand(1):
-            return tensor
+    def forward(self, tensor, force=False):
+        if not force:
+            if self.p < torch.rand(1):
+                return tensor
         for t in self.transforms:
             tensor = t(tensor)
         return tensor
+
+    def step(self, idx, *args):
+        if self.transforms:
+            if len(self.transforms) > idx:
+                self.transforms[idx].step(*args)
 
     def __repr__(self):
         format_string = self.__class__.__name__ + "("

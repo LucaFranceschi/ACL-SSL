@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-
+from typing import Optional
 
 def infonce(pred: torch.Tensor, target: torch.Tensor, beta: float = 1/0.07, **kwargs) -> torch.Tensor:
     '''
@@ -73,19 +73,41 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
 
     logits = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
 
-    if kwargs.get('san_active', False):
-        neg_audios = kwargs.get('neg_audios', None)
-        if neg_audios != None:
-            # neg_audios has shape [K, C]
-            # b is already broadcasted in the uncommented version
-            # neg_audios = neg_audios.unsqueeze(1).repeat(1, B, 1)
-            # neg_sim = torch.einsum('bnc,kbc->bkn', F.normalize(v_f, dim=2), neg_audios)
-            neg_sim = torch.einsum('bnc,kc->bkn', F.normalize(v_f, dim=2), F.normalize(neg_audios, dim=1)).mean(dim=2)
+    neg_audios = kwargs.get('neg_audios', None)
+    if neg_audios != None:
+        # neg_audios has shape [K, C]
+        # b is already broadcasted in the uncommented version
+        # neg_audios = neg_audios.unsqueeze(1).repeat(1, B, 1)
+        # neg_sim = torch.einsum('bnc,kbc->bkn', F.normalize(v_f, dim=2), neg_audios)
+        neg_sim = torch.einsum('bnc,kc->bkn', F.normalize(v_f, dim=2), F.normalize(neg_audios, dim=1)).mean(dim=2)
 
-            logits = torch.cat((logits, neg_sim), dim=1)
+        logits = torch.cat((logits, neg_sim), dim=1)
 
     labels = torch.arange(B).long().to(pred_emb.device)
 
     loss = 0.5 * (F.cross_entropy(logits * beta, labels) + F.cross_entropy(logits[:, :B].T * beta, labels))
 
     return loss
+
+
+def silence_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: bool = False, **kwargs) -> torch.Tensor:
+
+    if san and neg_audios != None:
+        sil_emb = neg_audios[0,:].squeeze() # shape = [C]
+        neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(sil_emb, dim=0))
+        return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
+
+
+def noise_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: bool = False, **kwargs) -> torch.Tensor:
+
+    if san and neg_audios != None:
+        noise_emb = neg_audios[1,:].squeeze() # shape = [C]
+        neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(noise_emb, dim=0))
+        return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
+
+
+def diff_san_l(v_f: torch.Tensor, pred_emb: torch.Tensor, noisy_v_f: torch.Tensor, pred_emb_noisy: torch.Tensor, **kwargs) -> torch.Tensor:
+    logits = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
+    logits_noisy = torch.einsum('bnc,bc->bn', F.normalize(noisy_v_f, dim=2), F.normalize(pred_emb_noisy))
+
+    return F.mse_loss(logits_noisy, logits)

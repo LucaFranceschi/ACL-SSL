@@ -30,24 +30,23 @@ def get_real_noise_audios(real_san_audios_path) -> torch.Tensor:
 
     return torch.stack(audio_files, dim=0)
 
-def get_silence_noise_audios(module, audio_size, real_san_audios_path = None):
-    if real_san_audios_path != None:
-        negative_audios = torch.cat(
-            (
-                torch.zeros(audio_size), # silence
-                torch.clip(torch.randn(audio_size), min=-1., max=1.), # gaussian noise
-                get_real_noise_audios(real_san_audios_path)
-            ),
-            dim=0
-        )
-    else:
-        negative_audios = torch.cat(
-            (
-                torch.zeros(audio_size), # silence
-                torch.clip(torch.randn(audio_size), min=-1., max=1.), # gaussian noise
-            ),
-            dim=0
-        )
+def get_silence_noise_audios(module, audio_size, san_active = False, real_san_audios_path = None):
+    '''
+    Generates embeddings for negative audios given if san_active or san_real_active,
+    concatenating along the first dimension all the audios given.
+    '''
+    negative_audios = []
+    if san_active:
+        negative_audios.append(torch.zeros(audio_size).unsqueeze(0))
+        negative_audios.append(torch.clip(torch.randn(audio_size), min=-1., max=1.).unsqueeze(0))
+
+    if real_san_audios_path:
+        negative_audios.append(get_real_noise_audios(real_san_audios_path))
+
+    if len(negative_audios) == 0:
+        return None
+
+    negative_audios = torch.cat(negative_audios, dim=0)
 
     prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
     placeholder_tokens = module.get_placeholder_token(prompt_template.replace('{}', ''))

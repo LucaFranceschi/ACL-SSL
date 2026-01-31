@@ -21,3 +21,5 @@ Train_record*
 **tmp**
 
 __pycache__
+
+train_outputs

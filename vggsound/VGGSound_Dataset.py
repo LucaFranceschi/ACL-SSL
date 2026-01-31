@@ -28,6 +28,8 @@ class VGGSoundDataset(Dataset):
         """
         super(VGGSoundDataset, self).__init__()
 
+        self.epoch = 0
+
         self.SAMPLE_RATE = 16000
         self.split = split
         self.set_length = set_length
@@ -55,10 +57,10 @@ class VGGSoundDataset(Dataset):
             # since at.AddNoise is not a thing in torchaudio 0.13.0
             if noise_transform:
                 self.audio_transform = RandomApply([
-                    AddRandomNoise(torch.Tensor([10.0]))
+                    AddRandomNoise()
                 ], 0.5)
             else:
-                self.audio_transform = RandomApply(None, -1.0) # nothing essentially
+                self.audio_transform = RandomApply([AddRandomNoise()], -1.0) # nothing essentially
 
             self.image_transform = vt.Compose([
                 vt.Resize((int(input_resolution * 1.1), int(input_resolution * 1.1)), vt.InterpolationMode.BICUBIC),
@@ -162,7 +164,8 @@ class VGGSoundDataset(Dataset):
         ''' Transform '''
         audio = self.audio_transform(audio_file) if self.set_length != 0 else None
         image = self.image_transform(image_file) if self.use_image else None
+        noisy_audios = audio = self.audio_transform(audio_file, force=True) if self.set_length != 0 else None
 
-        out = {'images': image, 'audios': audio, 'labels': label, 'ids': file_id}
+        out = {'images': image, 'audios': audio, 'noisy_audios': noisy_audios, 'labels': label, 'ids': file_id}
         out = {key: value for key, value in out.items() if value is not None}
         return out

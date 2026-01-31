@@ -30,7 +30,9 @@ import gc
 
 from silence_and_noise.silence_and_noise import get_silence_noise_audios
 
-def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path, san_active):
+import wandb
+
+def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path):
     """
     Main function for training an image compression model.
 
@@ -70,6 +72,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         if rank == 0:
             print(vars(args))
 
+    wandb_run = None
+    if rank == 0 and WANDB_LOGGING:
+        wandb_run = wandb.init(project=os.getenv('WANDB_PROJECT_NAME'), entity=os.getenv('WANDB_ENTITY_TEAM'), config=vars(args))
+
     ''' Fix random seed'''
     fix_seed(args.seed)
 
@@ -91,7 +97,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     # Get Train Dataloader (VGGSS)
     print(data_path_dict['vggsound'])
     train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train', is_train=True,
-                                    input_resolution=args.input_resolution, noise_transform=san_active)
+                                    input_resolution=args.input_resolution, noise_transform=args.san_added_noise_tr)
 
     validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test', is_train=False,
                                     input_resolution=args.input_resolution)
@@ -103,11 +109,11 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
                                                    worker_init_fn=seed_worker)
 
-    sampler_validation = DistributedSampler(validation_dataset, num_replicas=world_size, rank=rank, shuffle=True) if USE_DDP else None
+    sampler_validation = DistributedSampler(validation_dataset, num_replicas=world_size, rank=rank, shuffle=False) if USE_DDP else None
 
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, batch_size=args.batch_size, sampler=sampler_validation,
                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
-                                                   worker_init_fn=seed_worker)
+                                                   worker_init_fn=seed_worker, shuffle=False)
 
     # Get Test Dataloader (VGGSS)
     vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test', is_train=False,
@@ -186,12 +192,14 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     validation_loss_list = []
     train_loss_list = []
 
-    neg_audios = get_silence_noise_audios(module, train_dataset[0]['audios'].shape, 'silence_and_noise/audio')
+    real_san_audio_path = data_path_dict['san'] if args.san_real else None
 
-    if USE_CUDA:
+    neg_audios = get_silence_noise_audios(module, train_dataset[0]['audios'].shape, args.san, real_san_audio_path)
+
+    if USE_CUDA and neg_audios != None:
         neg_audios = neg_audios.half()
 
-    san_dict = {'san_active': san_active, 'neg_audios': neg_audios}
+    san_dict_base = {'san': args.san, 'san_real': args.san_real, 'neg_audios': neg_audios}
 
     ''' Train Loop '''
     for epoch in range(args.epoch):
@@ -206,10 +214,14 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         if rank == 0:
             train_start_time_per_epoch = time.time()
 
+        train_dataloader.dataset.audio_transform.step(0, epoch, args.san_added_noise_schedule_k)
+
         pbar = tqdm(train_dataloader, desc=f"Train Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
         sampler.set_epoch(epoch) if USE_DDP else None
         for step, data in enumerate(pbar):
+            train_dataloader.dataset.epoch = step
             images, audios, labels = data['images'], data['audios'], data['labels']
+            noisy_audios = data['noisy_audios']
 
             if USE_CUDA:
                 images = images.half()
@@ -223,16 +235,25 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                 audio_driven_embedding = module.encode_audio(audios.to(module.device), placeholder_tokens,
                                                              text_pos_at_prompt, prompt_length)
 
+                san_dict = san_dict_base
+                if 'diff_san_l' in args.loss:
+                    audio_driven_embedding_noisy = module.encode_audio(noisy_audios.to(module.device), placeholder_tokens,
+                                                             text_pos_at_prompt, prompt_length)
+                    audio_driven_embedding_noisy = audio_driven_embedding_noisy.half()
+                    out_dict_noisy = module(images.to(module.device), audio_driven_embedding_noisy, 352)
+                    out_dict_noisy = {f'noisy_{key}': value for key, value in out_dict_noisy.items()}
+                    san_dict = {'pred_emb_noisy': audio_driven_embedding_noisy, **out_dict_noisy, **san_dict}
+
                 if USE_CUDA:
                     audio_driven_embedding = audio_driven_embedding.half()
 
                 out_dict = module(images.to(module.device), audio_driven_embedding, 352)
 
-                loss_args = {'pred_emb': audio_driven_embedding, **san_dict, **out_dict}
+                loss_args = {'pred_emb': audio_driven_embedding, **out_dict, **san_dict}
 
                 for j, loss_name in enumerate(args.loss):
                     loss_dict[loss_name] = getattr(import_module('loss_utils'), loss_name)(**loss_args) * args.loss_w[j]
-                    loss_per_epoch_dict[loss_name] += loss_dict[loss_name]
+                    loss_per_epoch_dict[loss_name] += loss_dict[loss_name].item()
                 loss = torch.sum(torch.stack(list(loss_dict.values())))
 
             total_loss_per_epopch += loss.item()
@@ -255,8 +276,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             if rank == 0:
                 pbar.set_description(f"Training Epoch {epoch}, Loss = {round(avr_loss, 5)}")
 
-            if rank == 0:
-                print(gc.get_stats())
+                if wandb_run:
+                    wandb_run.log({f'train_losses/step/{key}': val for key, val in loss_dict.items()})
+                    wandb_run.log({f'train_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()})
+                    wandb_run.log({'train/step/loss' : loss.item()})
+                    wandb_run.log({'train/avr/loss' : avr_loss})
+
+                # print(gc.get_stats())
 
         if rank == 0:
             train_loss_list.append(float(avr_loss))
@@ -270,7 +296,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
         sampler_validation.set_epoch(epoch) if USE_DDP else None
         avr_loss_val = eval_vggsound_validation(module, validation_dataloader, args, viz_dir_template.format('vggsound_val'),
-                                        epoch, tensorboard_path=tensorboard_path, rank=rank)
+                                        epoch, tensorboard_path=tensorboard_path, rank=rank, wandb_run=wandb_run)
         validation_loss_list.append(avr_loss_val)
 
         if USE_DDP:
@@ -289,10 +315,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                 (loss_name, loss / loss_add_count) for loss_name, loss in loss_per_epoch_dict.items())
             training_consumed_sec += (time.time() - train_start_time_per_epoch)
 
-            writer.add_scalars('train/overall', {'loss': total_loss_per_epopch / loss_add_count}, epoch)
-            writer.add_scalars('train/loss', loss_per_epoch_dict, epoch)
-            for i, param in enumerate(optimizer.param_groups):
-                writer.add_scalars('train/lr', {f'param{i}': optimizer.param_groups[i]['lr']}, epoch)
+            # writer.add_scalars('train/overall', {'loss': total_loss_per_epopch / loss_add_count}, epoch)
+            # writer.add_scalars('train/loss', loss_per_epoch_dict, epoch)
+            # for i, param in enumerate(optimizer.param_groups):
+            #     writer.add_scalars('train/lr', {f'param{i}': optimizer.param_groups[i]['lr']}, epoch)
 
             eval_flickr_agg(module, flickr_dataloader, viz_dir_template.format('flickr'), epoch,
                             tensorboard_path=tensorboard_path)
@@ -343,15 +369,19 @@ if __name__ == "__main__":
     parser.add_argument('--flickr_path', type=str, default='', help='Flickr dataset directory')
     parser.add_argument('--avs_path', type=str, default='', help='AVSBench dataset directory')
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
+    parser.add_argument('--san_path', type=str, default='', help='Silence and noise data directory')
     parser.add_argument('--local_rank', type=str, default='', help='Rank for distributed train')
-    parser.add_argument('--san', action='store_true', help='Silence and noise implementation during training')
+    parser.add_argument('--wandb_logging', action='store_true', help='Login to wandb and log losses and experiments')
 
     args = parser.parse_args()
+
+    WANDB_LOGGING = args.wandb_logging
 
     data_path = {'vggss': args.vggss_path,
                  'flickr': args.flickr_path,
                  'avs': args.avs_path,
-                 'vggsound': args.vggsound_path}
+                 'vggsound': args.vggsound_path,
+                 'san': args.san_path}
 
     USE_CUDA = torch.cuda.is_available()
 
@@ -361,5 +391,8 @@ if __name__ == "__main__":
 
     rank = 0 if not USE_DDP else None
 
+    if rank == 0 and WANDB_LOGGING:
+        wandb.login(os.getenv('WANDB_API_KEY'))
+
     # Run example
-    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path, args.san)
+    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path)

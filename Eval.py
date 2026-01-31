@@ -24,6 +24,9 @@ from typing import List, Optional, Tuple, Dict
 
 from importlib import import_module
 
+import wandb
+import sys
+
 @torch.no_grad()
 def eval_vggsound_validation(
     model: torch.nn.Module,
@@ -32,7 +35,8 @@ def eval_vggsound_validation(
     result_dir: str,
     epoch: Optional[int] = None,
     tensorboard_path: Optional[str] = None,
-    rank = 0
+    rank = 0,
+    wandb_run: Optional[wandb.Run] = None
 ) -> Dict[str, float]:
     '''
     Evaluate provided model on VGG-Sound validation dataset.
@@ -56,7 +60,9 @@ def eval_vggsound_validation(
         os.makedirs(tensorboard_path, exist_ok=True)
         writer = SummaryWriter(tensorboard_path)
 
-    test_split = val_dataloader.dataset.split
+    # test_split = val_dataloader.dataset.split
+
+    loss_per_epoch_dict = {loss_name: 0.0 for loss_name in args.loss}
 
     # Get placeholder text
     prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
@@ -79,6 +85,7 @@ def eval_vggsound_validation(
 
         for j, loss_name in enumerate(args.loss):
             loss_dict[loss_name] = getattr(import_module('loss_utils'), loss_name)(**loss_args) * args.loss_w[j]
+            loss_per_epoch_dict[loss_name] += loss_dict[loss_name].item()
 
         loss = torch.sum(torch.stack(list(loss_dict.values())))
 
@@ -90,6 +97,13 @@ def eval_vggsound_validation(
             os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
             cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
 
+            if step < 2 and wandb_run and rank == 0:
+                heatmap_image = cv2.applyColorMap(((seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8), cv2.COLORMAP_JET)
+                original_image = Image.open(os.path.join(val_dataloader.dataset.image_path, name[j] + '.jpg')).resize((224, 224))
+                overlaid_image = cv2.addWeighted(np.array(original_image), 0.5, heatmap_image, 0.5, 0)
+
+                wandb_run.log({f'images/val_overlaid/{name[j]}.jpg': wandb.Image(overlaid_image)})
+
         total_loss_per_epopch += loss.item()
         loss_add_count += 1.0
 
@@ -97,6 +111,12 @@ def eval_vggsound_validation(
 
         if rank == 0:
             pbar.set_description(f"Validation Epoch {epoch}, Loss = {round(avr_loss, 5)}")
+
+            if wandb_run:
+                wandb_run.log({f'validation_losses/step/{key}': val for key, val in loss_dict.items()})
+                wandb_run.log({f'validation_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()})
+                wandb_run.log({'validation/step/loss' : loss.item()})
+                wandb_run.log({'validation/avr/loss' : avr_loss})
 
     # Save result
     os.makedirs(result_dir, exist_ok=True)

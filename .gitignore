@@ -30,3 +30,7 @@ outputs/
 .acl-ssl2
 
 __pycache__
+
+*.env
+
+train_outputs

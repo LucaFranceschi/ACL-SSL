@@ -15,8 +15,10 @@
 
 set -e
 
+EXPERIMENT_VERSION=$1
+
 nvidia-smi
 echo SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST
 
 singularity run --nv --bind /home/lfranceschi/repos/ACL-SSL container.sif \
-/home/lfranceschi/repos/ACL-SSL/scripts/2-single_gpu_train.sh
+/home/lfranceschi/repos/ACL-SSL/scripts/2-single_gpu_train.sh $EXPERIMENT_VERSION

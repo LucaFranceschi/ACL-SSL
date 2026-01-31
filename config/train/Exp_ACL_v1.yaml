@@ -1,7 +1,7 @@
 model: ACL
 
 common:
-  train_data: vggss_my_30
+  train_data: vggsound
   epoch: 20
   batch_size: 8
   input_resolution: 352
@@ -15,6 +15,10 @@ common:
     - 1
     - 1
     - 1
+  san: False
+  san_real: False
+  san_added_noise_tr: False
+  san_added_noise_schedule_k: 5
 
 optimizer: Adam
 scheduler: null
