@@ -70,7 +70,7 @@ class VGGSSDataset(Dataset):
         self.SAMPLE_RATE = 16000
         self.split = split
         self.set_length = set_length
-        self.csv_dir = 'VGGSS/metadata/' + split + '.csv'
+        self.csv_dir = os.path.join(data_path, 'metadata', split + '.csv')
 
         ''' Audio files '''
         self.audio_path = os.path.join(data_path, 'audio')
@@ -81,7 +81,7 @@ class VGGSSDataset(Dataset):
         image_files = set([fn.split('.jpg')[0] for fn in os.listdir(self.image_path) if fn.endswith('.jpg')])
 
         ''' Ground truth (Bounding box) '''
-        gt_path = f'VGGSS/metadata/vggss.json'
+        gt_path = os.path.join(data_path, 'metadata', 'vggss.json')
         if is_train:
             self.bbox_dict = None
         else:
@@ -143,7 +143,7 @@ class VGGSSDataset(Dataset):
             torch.Tensor: Audio data.
         """
         audio_file, _ = torchaudio.load(os.path.join(self.audio_path, self.file_list[item] + '.wav'))
-        
+
         if audio_file.shape[0] > 1:
             audio_file = audio_file.mean(dim=0)
 
@@ -232,8 +232,8 @@ class ExtendVGGSSDataset(Dataset):
 
         self.SAMPLE_RATE = 16000
         self.set_length = set_length
-        self.csv_dir = 'VGGSS/metadata/vggss_test.csv'
-        self.extend_csv_dir = 'VGGSS/metadata/vggss_test_plus_silent.csv'
+        self.csv_dir = os.path.join(data_path, 'metadata', 'vggss_test.csv')
+        self.extend_csv_dir = os.path.join(data_path, 'metadata', 'vggss_test_plus_silent.csv')
         self.split = 'exvggss'
 
         ''' Audio files '''
@@ -245,7 +245,7 @@ class ExtendVGGSSDataset(Dataset):
         image_files = set([fn.split('.jpg')[0] for fn in os.listdir(self.image_path) if fn.endswith('.jpg')])
 
         ''' Ground truth (Bounding box) '''
-        gt_path = f'VGGSS/metadata/vggss.json'
+        gt_path = os.path.join(data_path, 'metadata', 'vggss.json')
         self.bbox_dict = load_all_bboxes(gt_path)
 
         ''' Ground truth (Text label) '''
@@ -291,10 +291,10 @@ class ExtendVGGSSDataset(Dataset):
             torch.Tensor: Audio data.
         """
         audio_file, _ = torchaudio.load(os.path.join(self.audio_path, self.audio_files[item]))
-        
+
         if audio_file.shape[0] > 1:
             audio_file = audio_file.mean(dim=0)
-        
+
         audio_file = audio_file.squeeze(0)
 
         # slicing or padding based on set_length

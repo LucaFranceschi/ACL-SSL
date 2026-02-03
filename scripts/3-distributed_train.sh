@@ -7,18 +7,20 @@ echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 
 nvidia-smi
 
-DATA="/home/lfranceschi/repos/ACL-SSL"
+REPO="/home/lfranceschi/repos/ACL-SSL"
+DATA=$REPO/datasets
+SAVE_PATH=$REPO/train_outputs/$SLURM_JOBID
 
-cd $DATA
+cd $REPO
 
-mkdir -p $DATA/train_outputs/$SLURM_JOBID
+mkdir -p $SAVE_PATH
 
 set -a; source config/.env; set +a
 
 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port 12345 \
-Train_ACL_on_vggsound.py \
+train_ACL.py \
 --model_name ACL_ViT16 \
---model_path $DATA/pretrain \
+--model_path $REPO/pretrain \
 --exp_name aclifa_2gpu \
 --train_config $EXPERIMENT_VERSION \
 --vggss_path $DATA/VGGSS \
@@ -26,5 +28,5 @@ Train_ACL_on_vggsound.py \
 --avs_path $DATA/AVSBench/AVS1 \
 --vggsound_path $DATA/vggsound \
 --san_path $DATA/silence_and_noise/audio \
---save_path $DATA/train_outputs/$SLURM_JOBID \
+--save_path $SAVE_PATH \
 --wandb_logging

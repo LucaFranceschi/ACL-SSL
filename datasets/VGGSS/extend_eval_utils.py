@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from sklearn import metrics
 
-import util
+import utils.util as util
 
 
 class Evaluator(object):

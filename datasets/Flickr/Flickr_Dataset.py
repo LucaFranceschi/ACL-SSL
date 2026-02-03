@@ -80,7 +80,7 @@ class FlickrDataset(Dataset):
         self.SAMPLE_RATE = 16000
         self.split = split
         self.set_length = set_length
-        self.csv_dir = 'Flickr/metadata/' + split + '.csv'
+        self.csv_dir = os.path.join(data_path, 'metadata', split + '.csv')
         self.data_path = data_path
         self.is_trainset = True
 
@@ -234,8 +234,8 @@ class ExtendFlickrDataset(Dataset):
         self.SAMPLE_RATE = 16000
         self.set_length = set_length
         self.data_path = os.path.join(data_path, 'test')
-        self.csv_dir = 'Flickr/metadata/flickr_test.csv'
-        self.extend_csv_dir = 'Flickr/metadata/flickr_test_plus_silent.csv'
+        self.csv_dir = os.path.join(data_path, 'metadata', 'flickr_test.csv')
+        self.extend_csv_dir = os.path.join(data_path, 'metadata', 'flickr_test_plus_silent.csv')
         self.split = 'exflickr'
 
         ''' Audio files '''

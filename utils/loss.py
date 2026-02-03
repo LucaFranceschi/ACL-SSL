@@ -96,6 +96,7 @@ def silence_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san:
         sil_emb = neg_audios[0,:].squeeze() # shape = [C]
         neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(sil_emb, dim=0))
         return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
+    return torch.zeros([]).to(device=v_f.device)
 
 
 def noise_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: bool = False, **kwargs) -> torch.Tensor:
@@ -104,6 +105,7 @@ def noise_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: b
         noise_emb = neg_audios[1,:].squeeze() # shape = [C]
         neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(noise_emb, dim=0))
         return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
+    return torch.zeros([]).to(device=v_f.device)
 
 
 def diff_san_l(v_f: torch.Tensor, pred_emb: torch.Tensor, noisy_v_f: torch.Tensor, pred_emb_noisy: torch.Tensor, **kwargs) -> torch.Tensor:

@@ -1,4 +1,5 @@
 **/audio
+**/audio_8s
 **/extend_audio
 **/frames
 **/extend_frames
@@ -8,6 +9,7 @@
 **/AVS1
 
 .git
+old_outputs
 outputs
 pretrain
 Visual_results*
@@ -25,3 +27,9 @@ __pycache__
 train_outputs
 
 vggsound/val_audios
+
+wandb
+
+.vscode
+
+*.sif

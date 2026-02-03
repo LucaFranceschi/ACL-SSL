@@ -1,10 +1,10 @@
 import os
 
-from VGGSS.VGGSS_Dataset import VGGSSDataset, ExtendVGGSSDataset
-from Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
-from AVSBench.AVSBench_Dataset import AVSBenchDataset
+from datasets.VGGSS.VGGSS_Dataset import VGGSSDataset, ExtendVGGSSDataset
+from datasets.Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
+from datasets.AVSBench.AVSBench_Dataset import AVSBenchDataset
 
-from Eval import eval_vggss_agg, eval_flickr_agg, eval_avsbench_agg, eval_exvggss_agg, eval_exflickr_agg
+from utils.eval import eval_vggss_agg, eval_flickr_agg, eval_avsbench_agg, eval_exvggss_agg, eval_exflickr_agg
 
 from modules.models import *
 from modules.arg_utils import int_or_int_list_or_none

@@ -12,20 +12,19 @@ from torchvision import transforms as vt
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
-from util import get_prompt_template
-from viz_utils import draw_overall, draw_overlaid
+from utils.util import get_prompt_template
+from utils.viz import draw_overall, draw_overlaid
 
-import vggsound.eval_utils as vggsound_eval
-import VGGSS.eval_utils as vggss_eval
-import VGGSS.extend_eval_utils as exvggss_eval
-import Flickr.eval_utils as flickr_eval
-import Flickr.extend_eval_utils as exflickr_eval
-import AVSBench.eval_utils as avsbench_eval
+import datasets.vggsound.eval_utils as vggsound_eval
+import datasets.VGGSS.eval_utils as vggss_eval
+import datasets.VGGSS.extend_eval_utils as exvggss_eval
+import datasets.Flickr.eval_utils as flickr_eval
+import datasets.Flickr.extend_eval_utils as exflickr_eval
+import datasets.AVSBench.eval_utils as avsbench_eval
+from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
+
 from typing import List, Optional, Tuple, Dict
-
 from importlib import import_module
-
-from silence_and_noise.silence_and_noise import get_silence_noise_audios
 
 import wandb
 import sys
@@ -72,8 +71,11 @@ def eval_vggsound_validation(
 
     pbar = tqdm(val_dataloader, desc=f"Validation Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
 
+    san_dict_base = {'san': False, 'san_real': False, 'neg_audios': None}
+
     for step, data in enumerate(pbar):
         images, audios, name = data['images'], data['audios'], data['ids']
+        noisy_audios = data['noisy_audios']
 
         # Inference
         placeholder_tokens = model.get_placeholder_token(prompt_template.replace('{}', ''))
@@ -81,13 +83,21 @@ def eval_vggsound_validation(
         audio_driven_embedding = model.encode_audio(audios.to(model.device), placeholder_tokens, text_pos_at_prompt,
                                                     prompt_length)
 
+        san_dict = san_dict_base
+        if 'diff_san_l' in args.loss:
+            audio_driven_embedding_noisy = model.encode_audio(noisy_audios.to(model.device), placeholder_tokens,
+                                                        text_pos_at_prompt, prompt_length)
+            out_dict_noisy = model.forward_for_validation(images.to(model.device), audio_driven_embedding_noisy, 352)
+            out_dict_noisy = {f'noisy_{key}': value for key, value in out_dict_noisy.items()}
+            san_dict = {'pred_emb_noisy': audio_driven_embedding_noisy, **out_dict_noisy, **san_dict}
+
         # Localization result
         out_dict = model.forward_for_validation(images.to(model.device), audio_driven_embedding, 224)
 
-        loss_args = {'pred_emb': audio_driven_embedding, **out_dict}
+        loss_args = {'pred_emb': audio_driven_embedding, **out_dict, **san_dict}
 
         for j, loss_name in enumerate(args.loss):
-            loss_dict[loss_name] = getattr(import_module('loss_utils'), loss_name)(**loss_args) * args.loss_w[j]
+            loss_dict[loss_name] = getattr(import_module('utils.loss'), loss_name)(**loss_args) * args.loss_w[j]
             loss_per_epoch_dict[loss_name] += loss_dict[loss_name].item()
 
         loss = torch.sum(torch.stack(list(loss_dict.values())))

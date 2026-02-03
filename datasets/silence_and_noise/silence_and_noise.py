@@ -1,6 +1,6 @@
 import os
 import torch, torchaudio
-from util import get_prompt_template
+from utils.util import get_prompt_template
 
 def process_audio(audio_file, SAMPLE_RATE = 16000, set_length: int = 8):
     if audio_file.shape[0] > 1:

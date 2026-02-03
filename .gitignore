@@ -21,7 +21,7 @@ ms3_data
 
 vggsound*.csv
 
-outputs/
+old_outputs/
 
 **tmp**
 
@@ -35,4 +35,6 @@ __pycache__
 
 train_outputs
 
-vggsound/val_audios
+val_audios
+
+wandb
