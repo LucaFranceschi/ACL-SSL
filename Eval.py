@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 from util import get_prompt_template
 from viz_utils import draw_overall, draw_overlaid
 
+import vggsound.eval_utils as vggsound_eval
 import VGGSS.eval_utils as vggss_eval
 import VGGSS.extend_eval_utils as exvggss_eval
 import Flickr.eval_utils as flickr_eval
@@ -23,6 +24,8 @@ import AVSBench.eval_utils as avsbench_eval
 from typing import List, Optional, Tuple, Dict
 
 from importlib import import_module
+
+from silence_and_noise.silence_and_noise import get_silence_noise_audios
 
 import wandb
 import sys
@@ -37,7 +40,7 @@ def eval_vggsound_validation(
     tensorboard_path: Optional[str] = None,
     rank = 0,
     wandb_run: Optional[wandb.Run] = None
-) -> Dict[str, float]:
+):
     '''
     Evaluate provided model on VGG-Sound validation dataset.
 
@@ -131,6 +134,130 @@ def eval_vggsound_validation(
         writer.close()
 
     return float(total_loss_per_epopch / loss_add_count)
+
+
+@torch.no_grad()
+def eval_vggsound_agg(
+    model: torch.nn.Module,
+    test_dataloader: DataLoader,
+    result_dir: str,
+    epoch: Optional[int] = None,
+    tensorboard_path: Optional[str] = None
+) -> Dict[str, float]:
+    '''
+    Evaluate provided model on VGGS (VGG-Sound) test dataset.
+
+    Args:
+        model (torch.nn.Module): Sound localization model to evaluate.
+        test_dataloader (DataLoader): DataLoader for the test dataset.
+        result_dir (str): Directory to save the evaluation results.
+        epoch (int, optional): The current epoch number (default: None).
+        tensorboard_path (str, optional): Path to store TensorBoard logs. If None, TensorBoard logs won't be written.
+
+    Returns:
+        result_dict (Dict): Best AUC value (threshold optimized)
+
+    Notes:
+        The evaluation includes threshold optimization for VGG-SS.
+    '''
+
+    if tensorboard_path is not None and epoch is not None:
+        os.makedirs(tensorboard_path, exist_ok=True)
+        writer = SummaryWriter(tensorboard_path)
+
+    test_split = test_dataloader.dataset.split
+
+    # Get placeholder text
+    prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
+
+    # Thresholds for evaluation
+    thrs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.30, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.70, 0.75, 0.8, 0.85, 0.9, 0.95]
+    evaluators_silence = [vggsound_eval.Evaluator() for i in range(len(thrs))]
+    evaluators_noise = [vggsound_eval.Evaluator() for i in range(len(thrs))]
+
+    negative_audios_emb = get_silence_noise_audios(model, test_dataloader.dataset[0]['audios'].shape, san_active=True)
+    sil_emb, noise_emb = negative_audios_emb[0, :], negative_audios_emb[1, :]
+
+    for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate VGGS({test_split}) dataset...")):
+        images, audios = data['images'], data['audios']
+        labels, name = data['labels'], data['ids']
+
+        # Localization result
+        out_dict = model(images.to(model.device), audios, 224)
+
+        out_dict_silence = model(images.to(model.device), sil_emb, 224)
+
+        out_dict_noise = model(images.to(model.device), noise_emb, 224)
+
+        # Evaluation for all thresholds
+        for i, thr in enumerate(thrs):
+            evaluators_silence[i].evaluate_batch(out_dict_silence['heatmap'], thr)
+            evaluators_noise[i].evaluate_batch(out_dict_noise['heatmap'], thr)
+
+        # Visual results
+        for j in range(test_dataloader.batch_size):
+            seg = out_dict['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+
+            os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
+            cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
+
+        # Overall figure
+        for j in range(test_dataloader.batch_size):
+            original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.jpg')).resize(
+                (224, 224))
+
+            seg = out_dict['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap_image = Image.fromarray(seg_image)
+
+            seg = out_dict_silence['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap_image_silence = Image.fromarray(seg_image)
+
+            seg = out_dict_noise['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap_image_noise = Image.fromarray(seg_image)
+
+            draw_overall(result_dir, original_image, heatmap_image, heatmap_image_silence, heatmap_image_noise, labels[j], name[j])
+            draw_overlaid(result_dir, original_image, heatmap_image, name[j])
+
+    # Save result
+    os.makedirs(result_dir, exist_ok=True)
+    rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
+    msg = ''
+
+    # Final result
+    best_AUC_silence = 0.0
+    best_AUC_noise = 0.0
+
+    for i, thr in enumerate(thrs):
+        audio_loc_key, audio_loc_dict_silence = evaluators_silence[i].finalize()
+        audio_loc_key, audio_loc_dict_noise = evaluators_noise[i].finalize()
+
+        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+        msg += 'AP50(cIoU)={}, AUC={}\n'.format(audio_loc_dict_silence['pIA'], audio_loc_dict_silence['AUC_N'])
+        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+        msg += 'AP50(cIoU)={}, AUC={}\n'.format(audio_loc_dict_noise['pIA'], audio_loc_dict_noise['AUC_N'])
+
+        if tensorboard_path is not None and epoch is not None:
+            writer.add_scalars(f'test/{test_split}/silence/({thr})', audio_loc_dict_silence, epoch)
+            writer.add_scalars(f'test/{test_split}/noise/({thr})', audio_loc_dict_noise, epoch)
+
+        best_AUC_silence = audio_loc_dict_silence['AUC'] if best_AUC_silence < audio_loc_dict_silence['AUC'] else best_AUC_silence
+        best_AUC_noise = audio_loc_dict_noise['AUC'] if best_AUC_noise < audio_loc_dict_noise['AUC'] else best_AUC_noise
+
+    print(msg)
+    with open(rst_path, 'w') as fp_rst:
+        fp_rst.write(msg)
+
+    if tensorboard_path is not None and epoch is not None:
+        writer.close()
+
+    result_dict = {'epoch': epoch, 'best_AUC_silence': best_AUC_silence, 'best_AUC_noise': best_AUC_noise}
+
+    return result_dict
+
 
 @torch.no_grad()
 def eval_vggss_agg(

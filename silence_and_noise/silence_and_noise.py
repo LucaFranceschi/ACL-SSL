@@ -2,7 +2,7 @@ import os
 import torch, torchaudio
 from util import get_prompt_template
 
-def process_audio(audio_file, SAMPLE_RATE = 16000, set_length: int = 10):
+def process_audio(audio_file, SAMPLE_RATE = 16000, set_length: int = 8):
     if audio_file.shape[0] > 1:
         audio_file = audio_file.mean(dim=0)
 
@@ -20,17 +20,19 @@ def process_audio(audio_file, SAMPLE_RATE = 16000, set_length: int = 10):
 
     return audio_file
 
-def get_real_noise_audios(real_san_audios_path) -> torch.Tensor:
+def get_real_noise_audios(real_san_audios_path, SAMPLE_RATE = 16000, set_length: int = 8) -> torch.Tensor:
     audio_paths = os.listdir(real_san_audios_path)
     audio_files = []
 
     for audio_path in audio_paths:
         audio_file, _ = torchaudio.load(os.path.join(real_san_audios_path, audio_path))
-        audio_files.append(process_audio(audio_file))
+
+        audio_files.append(process_audio(audio_file, SAMPLE_RATE, set_length))
 
     return torch.stack(audio_files, dim=0)
 
-def get_silence_noise_audios(module, audio_size, san_active = False, real_san_audios_path = None):
+def get_silence_noise_audios(module, audio_size, san_active = False, real_san_audios_path = None,
+                             SAMPLE_RATE = 16000, set_length: int = 8) -> torch.Tensor:
     '''
     Generates embeddings for negative audios given if san_active or san_real_active,
     concatenating along the first dimension all the audios given.
@@ -41,7 +43,7 @@ def get_silence_noise_audios(module, audio_size, san_active = False, real_san_au
         negative_audios.append(torch.clip(torch.randn(audio_size), min=-1., max=1.).unsqueeze(0))
 
     if real_san_audios_path:
-        negative_audios.append(get_real_noise_audios(real_san_audios_path))
+        negative_audios.append(get_real_noise_audios(real_san_audios_path, SAMPLE_RATE, set_length))
 
     if len(negative_audios) == 0:
         return None

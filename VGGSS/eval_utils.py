@@ -103,4 +103,3 @@ class Evaluator(object):
         ap50 = self.finalize_AP50() * 100
         auc = self.finalize_AUC() * 100
         return self.metrics, {self.metrics[0]: ap50, self.metrics[1]: auc}
-

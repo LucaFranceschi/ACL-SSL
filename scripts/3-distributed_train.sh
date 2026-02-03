@@ -19,7 +19,7 @@ python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port 1
 Train_ACL_on_vggsound.py \
 --model_name ACL_ViT16 \
 --model_path $DATA/pretrain \
---exp_name aclifa_1gpu \
+--exp_name aclifa_2gpu \
 --train_config $EXPERIMENT_VERSION \
 --vggss_path $DATA/VGGSS \
 --flickr_path $DATA/Flickr \

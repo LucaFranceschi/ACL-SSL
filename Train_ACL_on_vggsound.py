@@ -194,7 +194,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     real_san_audio_path = data_path_dict['san'] if args.san_real else None
 
-    neg_audios = get_silence_noise_audios(module, train_dataset[0]['audios'].shape, args.san, real_san_audio_path)
+    neg_audios = get_silence_noise_audios(module, train_dataset[0]['audios'].shape, args.san,
+                                          real_san_audio_path, train_dataset.SAMPLE_RATE, train_dataset.set_length)
 
     if USE_CUDA and neg_audios != None:
         neg_audios = neg_audios.half()
@@ -210,9 +211,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
         loss_dict = {}
         loss_per_epoch_dict = {loss_name: 0.0 for loss_name in args.loss}
-
-        if rank == 0:
-            train_start_time_per_epoch = time.time()
 
         train_dataloader.dataset.audio_transform.step(0, epoch, args.san_added_noise_schedule_k)
 
@@ -299,6 +297,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                         epoch, tensorboard_path=tensorboard_path, rank=rank, wandb_run=wandb_run)
         validation_loss_list.append(avr_loss_val)
 
+        if rank == 0:
+            save_dir = os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{str(epoch)}.pth')
+            module.save(save_dir)
+
         if USE_DDP:
             dist.barrier()
 
@@ -311,15 +313,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     with torch.no_grad():
 
         if rank == 0:
-            loss_per_epoch_dict = dict(
-                (loss_name, loss / loss_add_count) for loss_name, loss in loss_per_epoch_dict.items())
-            training_consumed_sec += (time.time() - train_start_time_per_epoch)
-
-            # writer.add_scalars('train/overall', {'loss': total_loss_per_epopch / loss_add_count}, epoch)
-            # writer.add_scalars('train/loss', loss_per_epoch_dict, epoch)
-            # for i, param in enumerate(optimizer.param_groups):
-            #     writer.add_scalars('train/lr', {f'param{i}': optimizer.param_groups[i]['lr']}, epoch)
-
             eval_flickr_agg(module, flickr_dataloader, viz_dir_template.format('flickr'), epoch,
                             tensorboard_path=tensorboard_path)
             eval_exflickr_agg(module, exflickr_dataloader, viz_dir_template.format('exflickr'), epoch,
@@ -330,13 +323,9 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                         tensorboard_path=tensorboard_path)
             eval_exvggss_agg(module, exvggss_dataloader, viz_dir_template.format('exvggss'), epoch,
                             tensorboard_path=tensorboard_path)
-
-            save_dir = os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{str(epoch)}.pth')
-            module.save(save_dir)
-
-            if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
-                best_pth_dict = result_dict
-                shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
+            # if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
+            #     best_pth_dict = result_dict
+            #     shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
 
         if rank == 1 or not USE_DDP:
             eval_avsbench_agg(module, avss4_dataloader, viz_dir_template.format('s4'), epoch,

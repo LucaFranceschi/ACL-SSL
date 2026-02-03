@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Union
 from util import AddRandomNoise, RandomApply
 
 class VGGSoundDataset(Dataset):
-    def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 10,
+    def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 8,
                  input_resolution: int = 224, hard_aug: bool = False, noise_transform: bool = False):
         """
         Initialize VGG-Sound Dataset.
@@ -22,7 +22,7 @@ class VGGSoundDataset(Dataset):
             data_path (str): Path to the dataset.
             split (str): Dataset split (Use csv file name in metadata directory).
             is_train (bool, optional): Whether it's a training set. Default is True.
-            set_length (int, optional): Duration of input audio. Default is 10.
+            set_length (int, optional): Duration of input audio. Default is 8.
             input_resolution (int, optional): Resolution of input images. Default is 224.
             hard_aug (bool, optional): Not used.
         """
@@ -164,7 +164,7 @@ class VGGSoundDataset(Dataset):
         ''' Transform '''
         audio = self.audio_transform(audio_file) if self.set_length != 0 else None
         image = self.image_transform(image_file) if self.use_image else None
-        noisy_audios = audio = self.audio_transform(audio_file, force=True) if self.set_length != 0 else None
+        noisy_audios = self.audio_transform(audio_file, force=True) if self.set_length != 0 and self.is_train else None
 
         out = {'images': image, 'audios': audio, 'noisy_audios': noisy_audios, 'labels': label, 'ids': file_id}
         out = {key: value for key, value in out.items() if value is not None}

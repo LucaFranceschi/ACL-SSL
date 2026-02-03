@@ -23,3 +23,5 @@ Train_record*
 __pycache__
 
 train_outputs
+
+vggsound/val_audios
