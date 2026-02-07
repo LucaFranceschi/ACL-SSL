@@ -32,30 +32,45 @@ def get_real_noise_audios(real_san_audios_path, SAMPLE_RATE = 16000, set_length:
     return torch.stack(audio_files, dim=0)
 
 def get_silence_noise_audios(module, audio_size, san_active = False, real_san_audios_path = None,
-                             SAMPLE_RATE = 16000, set_length: int = 8) -> torch.Tensor:
+                             SAMPLE_RATE = 16000, set_length: int = 8, use_cuda = False) -> dict[str, torch.Tensor]:
     '''
     Generates embeddings for negative audios given if san_active or san_real_active,
     concatenating along the first dimension all the audios given.
     '''
-    negative_audios = []
-    if san_active:
-        negative_audios.append(torch.zeros(audio_size).unsqueeze(0))
-        negative_audios.append(torch.clip(torch.randn(audio_size), min=-1., max=1.).unsqueeze(0))
-
-    if real_san_audios_path:
-        negative_audios.append(get_real_noise_audios(real_san_audios_path, SAMPLE_RATE, set_length))
-
-    if len(negative_audios) == 0:
-        return None
-
-    negative_audios = torch.cat(negative_audios, dim=0)
-
     prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
     placeholder_tokens = module.get_placeholder_token(prompt_template.replace('{}', ''))
-    placeholder_tokens = placeholder_tokens.repeat((negative_audios.shape[0], 1))
 
-    with torch.no_grad():
-        neg_audios_embedded = module.encode_audio(negative_audios.to(module.device),
-                                                  placeholder_tokens, text_pos_at_prompt, prompt_length)
+    negative_audios_emb = {}
+    if san_active:
+        negative_audios = torch.cat(
+            (
+                torch.zeros(audio_size).unsqueeze(0),
+                torch.clip(torch.randn(audio_size), min=-1., max=1.).unsqueeze(0)
+            ),
+            dim=0
+        )
 
-    return neg_audios_embedded.detach() # torch.Size([negative_audios.shape[0], 512])
+        if use_cuda:
+            negative_audios.half()
+
+        negative_audios_emb['pred_emb_san'] = module.encode_audio(
+            negative_audios.to(module.device),
+            placeholder_tokens.repeat((negative_audios.shape[0], 1)),
+            text_pos_at_prompt,
+            prompt_length
+        ).detach()
+
+    if real_san_audios_path:
+        negative_audios = get_real_noise_audios(real_san_audios_path, SAMPLE_RATE, set_length)
+
+        if use_cuda:
+            negative_audios.half()
+
+        negative_audios_emb['pred_emb_real_san'] = module.encode_audio(
+            negative_audios.to(module.device),
+            placeholder_tokens.repeat((negative_audios.shape[0], 1)),
+            text_pos_at_prompt,
+            prompt_length
+        ).detach()
+
+    return negative_audios_emb

@@ -1,5 +1,6 @@
 **/audio
 **/audio_8s
+**/audio_3s
 **/extend_audio
 **/frames
 **/extend_frames

@@ -96,11 +96,14 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     ''' Get dataloader '''
     # Get Train Dataloader (VGGSS)
     print(data_path_dict['vggsound'])
-    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train', is_train=True,
+    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train_subset', is_train=True,
                                     input_resolution=args.input_resolution, noise_transform=args.san_added_noise_tr, set_length=3)
 
-    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test', is_train=False,
+    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_val_subset', is_train=False,
                                     input_resolution=args.input_resolution, set_length=3)
+
+    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test_subset', is_train=False,
+                                    input_resolution=args.ground_truth_resolution, set_length=3)
 
     ''' Create DistributedSampler '''
     sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True) if USE_DDP else None
@@ -114,6 +117,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, batch_size=args.batch_size, sampler=sampler_validation,
                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
                                                    worker_init_fn=seed_worker, shuffle=False)
+
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
+                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
+                                                    worker_init_fn=seed_worker, shuffle=False)
 
     # Get Test Dataloader (VGGSS)
     vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test', is_train=False,
@@ -140,12 +147,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                                     pin_memory=False, drop_last=False)
 
     # Get Test Dataloader (Extended VGGSS)
-    exvggss_dataset = ExtendVGGSSDataset(data_path_dict['vggss'], input_resolution=352)
+    exvggss_dataset = ExtendVGGSSDataset(data_path_dict['vggss'], input_resolution=args.input_resolution)
     exvggss_dataloader = torch.utils.data.DataLoader(exvggss_dataset, batch_size=1, shuffle=False, num_workers=1,
                                                      pin_memory=False, drop_last=False)
 
     # Get Test Dataloader (Extended Flickr)
-    exflickr_dataset = ExtendFlickrDataset(data_path_dict['flickr'], input_resolution=352)
+    exflickr_dataset = ExtendFlickrDataset(data_path_dict['flickr'], input_resolution=args.input_resolution)
     exflickr_dataloader = torch.utils.data.DataLoader(exflickr_dataset, batch_size=1, shuffle=False, num_workers=1,
                                                       pin_memory=False, drop_last=False)
 
@@ -194,13 +201,20 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     real_san_audio_path = data_path_dict['san'] if args.san_real else None
 
-    neg_audios = get_silence_noise_audios(module, train_dataset[0]['audios'].shape, args.san,
-                                          real_san_audio_path, train_dataset.SAMPLE_RATE, train_dataset.set_length)
+    neg_audios = get_silence_noise_audios(module,
+        train_dataset[0]['audios'].shape,
+        args.san,
+        real_san_audio_path,
+        train_dataset.SAMPLE_RATE,
+        train_dataset.set_length,
+        use_cuda=USE_CUDA
+    )
 
     if USE_CUDA and neg_audios != None:
-        neg_audios = neg_audios.half()
+        for key in neg_audios.keys():
+            neg_audios[key] = neg_audios[key].half()
 
-    san_dict_base = {'san': args.san, 'san_real': args.san_real, 'neg_audios': neg_audios}
+    san_dict = {'san': args.san, 'san_real': args.san_real, **neg_audios}
 
     ''' Train Loop '''
     for epoch in range(args.epoch):
@@ -226,6 +240,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
             prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
 
+            audio_embeddings = {}
+
             with autocast_fn():
                 # Train step
                 placeholder_tokens = module.get_placeholder_token(prompt_template.replace('{}', ''))
@@ -233,22 +249,29 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                 audio_driven_embedding = module.encode_audio(audios.to(module.device), placeholder_tokens,
                                                              text_pos_at_prompt, prompt_length)
 
-                san_dict = san_dict_base
+                if USE_CUDA:
+                    audio_driven_embedding = audio_driven_embedding.half()
+
+                audio_embeddings['pred_emb'] = audio_driven_embedding
+
                 if 'diff_san_l' in args.loss:
                     audio_driven_embedding_noisy = module.encode_audio(noisy_audios.to(module.device), placeholder_tokens,
                                                              text_pos_at_prompt, prompt_length)
                     if USE_CUDA:
                         audio_driven_embedding_noisy = audio_driven_embedding_noisy.half()
-                    out_dict_noisy = module(images.to(module.device), audio_driven_embedding_noisy, 352)
-                    out_dict_noisy = {f'noisy_{key}': value for key, value in out_dict_noisy.items()}
-                    san_dict = {'pred_emb_noisy': audio_driven_embedding_noisy, **out_dict_noisy, **san_dict}
 
-                if USE_CUDA:
-                    audio_driven_embedding = audio_driven_embedding.half()
+                    audio_embeddings['pred_emb_noisy'] = audio_driven_embedding_noisy
 
-                out_dict = module(images.to(module.device), audio_driven_embedding, 352)
+                if 'silence_l' in args.loss and args.san:
+                    audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-                loss_args = {'pred_emb': audio_driven_embedding, **out_dict, **san_dict}
+                if 'noise_l' in args.loss and args.san:
+                    audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+
+                # contains also SaN outputs if set
+                out_dict = module(images.to(module.device), resolution=args.input_resolution, **audio_embeddings)
+
+                loss_args = {**out_dict, **san_dict, **audio_embeddings}
 
                 for j, loss_name in enumerate(args.loss):
                     loss_dict[loss_name] = getattr(import_module('utils.loss'), loss_name)(**loss_args) * args.loss_w[j]
@@ -294,8 +317,20 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         viz_dir_template = os.path.join(save_path, 'Visual_results', '{}', model_exp_name, f'epoch{epoch}')
 
         sampler_validation.set_epoch(epoch) if USE_DDP else None
-        avr_loss_val = eval_vggsound_validation(module, validation_dataloader, args, viz_dir_template.format('vggsound_val'),
-                                        epoch, tensorboard_path=tensorboard_path, rank=rank, wandb_run=wandb_run)
+        avr_loss_val = eval_vggsound_validation(
+            module,
+            validation_dataloader,
+            args,
+            viz_dir_template.format('vggsound_val'),
+            epoch,
+            tensorboard_path=tensorboard_path,
+            rank=rank,
+            wandb_run=wandb_run,
+            data_path_dict=data_path_dict,
+            use_cuda=USE_CUDA,
+            use_amp=config['amp']
+        )
+
         validation_loss_list.append(avr_loss_val)
 
         if rank == 0:
@@ -314,23 +349,26 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     with torch.no_grad():
 
         if rank == 0:
-            eval_flickr_agg(module, flickr_dataloader, viz_dir_template.format('flickr'), epoch,
-                            tensorboard_path=tensorboard_path)
-            eval_exflickr_agg(module, exflickr_dataloader, viz_dir_template.format('exflickr'), epoch,
-                            tensorboard_path=tensorboard_path)
-            eval_avsbench_agg(module, avsms3_dataloader, viz_dir_template.format('ms3'), epoch,
-                            tensorboard_path=tensorboard_path)
-            result_dict = eval_vggss_agg(module, vggss_dataloader, viz_dir_template.format('vggss'), epoch,
+            # eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
+            #                 tensorboard_path=tensorboard_path)
+            # eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
+            #                 tensorboard_path=tensorboard_path)
+            # eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
+            #                 tensorboard_path=tensorboard_path)
+            # result_dict = eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
+            #                             tensorboard_path=tensorboard_path)
+            result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
                                         tensorboard_path=tensorboard_path)
-            eval_exvggss_agg(module, exvggss_dataloader, viz_dir_template.format('exvggss'), epoch,
-                            tensorboard_path=tensorboard_path)
+            # eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
+            #                 tensorboard_path=tensorboard_path)
             # if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
             #     best_pth_dict = result_dict
             #     shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
 
         if rank == 1 or not USE_DDP:
-            eval_avsbench_agg(module, avss4_dataloader, viz_dir_template.format('s4'), epoch,
-                            tensorboard_path=tensorboard_path)
+            # eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
+            #                 tensorboard_path=tensorboard_path)
+            pass
 
     writer.close()
 
