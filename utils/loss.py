@@ -73,8 +73,13 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
 
     logits = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
 
-    neg_audios = kwargs.get('neg_audios', None)
-    if neg_audios != None:
+    neg_audios = []
+    neg_audios.append(kwargs.get('pred_emb_san', None))
+    neg_audios.append(kwargs.get('pred_emb_real_san', None))
+    neg_audios = [val for val in neg_audios if val is not None]
+    neg_audios = torch.cat(neg_audios, dim=0)
+
+    if neg_audios.shape[0] > 0:
         # neg_audios has shape [K, C]
         # b is already broadcasted in the uncommented version
         # neg_audios = neg_audios.unsqueeze(1).repeat(1, B, 1)
@@ -89,24 +94,17 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
 
     return loss
 
+def silence_l(noise_n_area: torch.Tensor, v_f: torch.Tensor, n_thr: float = 0.0, san = False, **kwargs) -> torch.Tensor:
+    loss = torch.zeros([]).to(v_f.device) # using here v_f only to get device since it should be guaranteed to exist
+    if san:
+        loss = torch.abs(noise_n_area - n_thr)
+    return loss
 
-def silence_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: bool = False, **kwargs) -> torch.Tensor:
-
-    if san and neg_audios != None:
-        sil_emb = neg_audios[0,:].squeeze() # shape = [C]
-        neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(sil_emb, dim=0))
-        return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
-    return torch.zeros([]).to(device=v_f.device)
-
-
-def noise_l(v_f: torch.Tensor, neg_audios: Optional[torch.Tensor] = None, san: bool = False, **kwargs) -> torch.Tensor:
-
-    if san and neg_audios != None:
-        noise_emb = neg_audios[1,:].squeeze() # shape = [C]
-        neg_sim = torch.einsum('bnc,c->bn', F.normalize(v_f, dim=2), F.normalize(noise_emb, dim=0))
-        return F.mse_loss(neg_sim, torch.zeros_like(neg_sim))
-    return torch.zeros([]).to(device=v_f.device)
-
+def noise_l(sil_n_area: torch.Tensor, v_f: torch.Tensor, n_thr: float = 0.0, san = False, **kwargs) -> torch.Tensor:
+    loss = torch.zeros([]).to(v_f.device)
+    if san:
+        loss = torch.abs(sil_n_area - n_thr)
+    return loss
 
 def diff_san_l(v_f: torch.Tensor, pred_emb: torch.Tensor, noisy_v_f: torch.Tensor, pred_emb_noisy: torch.Tensor, **kwargs) -> torch.Tensor:
     logits = torch.einsum('bnc,bc->bn', F.normalize(v_f, dim=2), F.normalize(pred_emb))
