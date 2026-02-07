@@ -37,7 +37,7 @@ def eval_vggsound_validation(
     val_dataloader: DataLoader,
     args,
     result_dir: str,
-    epoch: Optional[int] = None,
+    epoch: Optional[int],
     tensorboard_path: Optional[str] = None,
     rank = 0,
     wandb_run: Optional[wandb.Run] = None,
@@ -58,6 +58,8 @@ def eval_vggsound_validation(
     Returns:
         loss and other things
     '''
+    gt_resolution = (args.ground_truth_resolution, args.ground_truth_resolution)
+
     autocast_fn = nullcontext
     if use_amp:
         autocast_fn = autocast
@@ -141,7 +143,7 @@ def eval_vggsound_validation(
                 audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
             # contains also SaN outputs if set
-            out_dict = model.forward_for_validation(images.to(model.device), resolution=args.input_resolution, **audio_embeddings)
+            out_dict = model.forward_for_validation(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
 
             loss_args = {**out_dict, **san_dict, **audio_embeddings}
 
@@ -160,10 +162,13 @@ def eval_vggsound_validation(
 
             if step < 2 and wandb_run and rank == 0:
                 heatmap_image = cv2.applyColorMap(((seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8), cv2.COLORMAP_JET)
-                original_image = Image.open(os.path.join(val_dataloader.dataset.image_path, name[j] + '.jpg')).resize((224, 224))
+                original_image = Image.open(os.path.join(val_dataloader.dataset.image_path, name[j] + '.jpg')).resize(gt_resolution)
                 overlaid_image = cv2.addWeighted(np.array(original_image), 0.5, heatmap_image, 0.5, 0)
 
-                wandb_run.log({f'images/val_overlaid/{name[j]}.jpg': wandb.Image(overlaid_image)})
+                wandb_run.log({
+                    f'images/val_overlaid/{name[j]}.jpg': wandb.Image(overlaid_image),
+                    'trainer/epoch': epoch
+                })
 
         total_loss_per_epopch += loss.item()
         loss_add_count += 1.0
@@ -174,10 +179,15 @@ def eval_vggsound_validation(
             pbar.set_description(f"Validation Epoch {epoch}, Loss = {round(avr_loss, 5)}")
 
             if wandb_run:
-                wandb_run.log({f'validation_losses/step/{key}': val for key, val in loss_dict.items()})
-                wandb_run.log({f'validation_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()})
-                wandb_run.log({'validation/step/loss' : loss.item()})
-                wandb_run.log({'validation/avr/loss' : avr_loss})
+                val_step = (epoch * len(val_dataloader)) + step
+
+                wandb_run.log({
+                    **{f'validation_losses/step/{key}': val for key, val in loss_dict.items()},
+                    **{f'validation_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()},
+                    'validation/step/loss': loss.item(),
+                    'validation/avr/loss': avr_loss,
+                    'trainer/val_step': val_step
+                })
 
     # Save result
     os.makedirs(result_dir, exist_ok=True)
@@ -247,10 +257,6 @@ def eval_vggsound_agg(
         use_cuda=use_cuda
     )
 
-    if use_cuda and neg_audios != None:
-        for key in neg_audios.keys():
-            neg_audios[key] = neg_audios[key].half()
-
     san_dict = {'san': args.san, 'san_real': args.san_real, **neg_audios}
 
     # Thresholds for evaluation
@@ -311,15 +317,16 @@ def eval_vggsound_agg(
             seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
             heatmap_image = Image.fromarray(seg_image)
 
-            seg = out_dict['sil_heatmap'][j:j+1]
-            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
-            heatmap_image_silence = Image.fromarray(seg_image)
+            if 'sil_heatmap' in out_dict and 'noise_heatmap' in out_dict:
+                seg = out_dict['sil_heatmap'][j:j+1]
+                seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+                heatmap_image_silence = Image.fromarray(seg_image)
 
-            seg = out_dict['noise_heatmap'][j:j+1]
-            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
-            heatmap_image_noise = Image.fromarray(seg_image)
+                seg = out_dict['noise_heatmap'][j:j+1]
+                seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+                heatmap_image_noise = Image.fromarray(seg_image)
 
-            draw_overall(result_dir, original_image, heatmap_image, heatmap_image_silence, heatmap_image_noise, labels[j], name[j])
+                draw_overall(result_dir, original_image, heatmap_image, heatmap_image_silence, heatmap_image_noise, labels[j], name[j])
             draw_overlaid(result_dir, original_image, heatmap_image, name[j])
 
     # Save result
@@ -334,17 +341,19 @@ def eval_vggsound_agg(
     for i, thr in enumerate(thrs):
         std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+        if 'silence_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
+                best_AUC_silence = [silence_metrics['AUC_N'], thr] if best_AUC_silence[0] < silence_metrics['AUC_N'] else best_AUC_silence
 
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
-            writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
-
-        best_AUC_silence = [silence_metrics['AUC_N'], thr] if best_AUC_silence[0] < silence_metrics['AUC_N'] else best_AUC_silence
-        best_AUC_noise = [noise_metrics['AUC_N'], thr] if best_AUC_noise[0] < noise_metrics['AUC_N'] else best_AUC_noise
+        if 'noise_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+                best_AUC_noise = [noise_metrics['AUC_N'], thr] if best_AUC_noise[0] < noise_metrics['AUC_N'] else best_AUC_noise
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:

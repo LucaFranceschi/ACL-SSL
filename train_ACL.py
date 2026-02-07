@@ -75,6 +75,11 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     wandb_run = None
     if rank == 0 and WANDB_LOGGING:
         wandb_run = wandb.init(project=os.getenv('WANDB_PROJECT_NAME'), entity=os.getenv('WANDB_ENTITY_TEAM'), config=vars(args))
+        wandb.define_metric("train/*", step_metric="trainer/train_step")
+        wandb.define_metric("train_losses/*", step_metric="trainer/train_step")
+        wandb.define_metric("validation/*", step_metric="trainer/val_step")
+        wandb.define_metric("validation_losses/*", step_metric="trainer/val_step")
+        wandb.define_metric("images/val_overlaid/*", step_metric="trainer/epoch")
 
     ''' Fix random seed'''
     fix_seed(args.seed)
@@ -95,14 +100,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     ''' Get dataloader '''
     # Get Train Dataloader (VGGSS)
-    print(data_path_dict['vggsound'])
-    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train_subset', is_train=True,
+    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train', is_train=True,
                                     input_resolution=args.input_resolution, noise_transform=args.san_added_noise_tr, set_length=3)
 
-    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_val_subset', is_train=False,
+    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_val', is_train=False,
                                     input_resolution=args.input_resolution, set_length=3)
 
-    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test_subset', is_train=False,
+    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test', is_train=False,
                                     input_resolution=args.ground_truth_resolution, set_length=3)
 
     ''' Create DistributedSampler '''
@@ -227,11 +231,11 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         loss_per_epoch_dict = {loss_name: 0.0 for loss_name in args.loss}
 
         train_dataloader.dataset.audio_transform.step(0, epoch, args.san_added_noise_schedule_k)
+        train_dataloader.dataset.epoch = epoch
 
         pbar = tqdm(train_dataloader, desc=f"Train Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
         sampler.set_epoch(epoch) if USE_DDP else None
         for step, data in enumerate(pbar):
-            train_dataloader.dataset.epoch = step
             images, audios, labels = data['images'], data['audios'], data['labels']
             noisy_audios = data['noisy_audios']
 
@@ -299,10 +303,15 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                 pbar.set_description(f"Training Epoch {epoch}, Loss = {round(avr_loss, 5)}")
 
                 if wandb_run:
-                    wandb_run.log({f'train_losses/step/{key}': val for key, val in loss_dict.items()})
-                    wandb_run.log({f'train_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()})
-                    wandb_run.log({'train/step/loss' : loss.item()})
-                    wandb_run.log({'train/avr/loss' : avr_loss})
+                    train_step = (epoch * len(train_dataloader)) + step
+
+                    wandb_run.log({
+                        **{f'train_losses/step/{key}': val for key, val in loss_dict.items()},
+                        **{f'train_losses/avr/{key}': val / loss_add_count for key, val in loss_per_epoch_dict.items()},
+                        'train/step/loss': loss.item(),
+                        'train/avr/loss': avr_loss,
+                        'trainer/train_step': train_step
+                    })
 
                 # print(gc.get_stats())
 
@@ -358,7 +367,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             # result_dict = eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
             #                             tensorboard_path=tensorboard_path)
             result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
-                                        tensorboard_path=tensorboard_path)
+                                        tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             # eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
             #                 tensorboard_path=tensorboard_path)
             # if best_pth_dict['best_AUC'] < result_dict['best_AUC']:

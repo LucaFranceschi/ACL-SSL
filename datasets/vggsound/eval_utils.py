@@ -17,11 +17,10 @@ class Evaluator(object):
         """
         super(Evaluator, self).__init__()
         self.std_metrics = {}
-        self.silence_metrics = {'pIA': [], 'metrics': {'AUC_N': 0.0, 'ap50': 0.0, 'pIA_hat': 0.0}}
-        self.noise_metrics = {'pIA': [], 'metrics': {'AUC_N': 0.0, 'ap50': 0.0, 'pIA_hat': 0.0}}
+        self.silence_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'ap50': None, 'pIA_hat': None}}
+        self.noise_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'ap50': None, 'pIA_hat': None}}
 
-    def evaluate_batch(self, heatmap: torch.Tensor, sil_heatmap: torch.Tensor, noise_heatmap: torch.Tensor,
-                        thr: Optional[float] = None, **kwargs) -> None:
+    def evaluate_batch(self, heatmap: torch.Tensor, thr: Optional[float] = None, **kwargs) -> None:
         """
         Evaluate a batch of predictions.
 
@@ -32,36 +31,42 @@ class Evaluator(object):
         Returns:
             None
         """
+
+        sil_heatmap = kwargs.get('sil_heatmap', None)
+        if sil_heatmap != None:
+            self._evaluate_batch(sil_heatmap, 'sil', thr)
+
+        noise_heatmap = kwargs.get('noise_heatmap', None)
+        if noise_heatmap != None:
+            self._evaluate_batch(noise_heatmap, 'noise', thr)
+
+    def _evaluate_batch(self, heatmap, metric, thr):
         for j in range(heatmap.size(0)):
             infer = heatmap[j]
-            infer_s = sil_heatmap[j]
-            infer_n = noise_heatmap[j]
             if thr is None:
                 thr = np.sort(infer.detach().cpu().numpy().flatten())[int(infer.shape[1] * infer.shape[2] / 2)]
-            self.cal_pIA(infer_s, infer_n, thr)
+            self.cal_pIA(infer, metric, thr)
 
-    def cal_pIA(self, infer_s: torch.Tensor, infer_n: torch.Tensor, thres: float = 0.01) -> List[float]:
+    def cal_pIA(self, infer: torch.Tensor, metric: str, thres: float = 0.01):
         '''
         Calculate the percentage of Image Area as described in:
             Juanola, Xavier, et al. "Learning from Silence and Noise for Visual Sound Source Localization."
 
         :param self: Description
         '''
-        infer_map_s = torch.zeros_like(infer_s)
-        infer_map_s[infer_s >= thres] = 1
+        infer_map = torch.zeros_like(infer)
+        infer_map[infer >= thres] = 1
 
-        infer_map_n = torch.zeros_like(infer_n)
-        infer_map_n[infer_n >= thres] = 1
+        shape = infer_map.shape
 
-        shape = infer_map_n.shape
+        pIA = torch.sum(infer_map.detach().cpu(), dim=(1, 2)).float() / (shape[1] * shape[2])
 
-        pIA_s = torch.sum(infer_map_s.detach().cpu(), dim=(1, 2)).float() / (shape[1] * shape[2])
-        pIA_n = torch.sum(infer_map_n.detach().cpu(), dim=(1, 2)).float() / (shape[1] * shape[2])
+        if metric == 'sil':
+            self.silence_metrics['pIA'].append(pIA)
+        elif metric == 'noise':
+            self.noise_metrics['pIA'].append(pIA)
+        return
 
-        self.silence_metrics['pIA'].append(pIA_s)
-        self.noise_metrics['pIA'].append(pIA_n)
-
-        return pIA_s, pIA_n
 
     def finalize_AUC_N(self):
         """
@@ -71,11 +76,11 @@ class Evaluator(object):
             float: AUC value.
         """
         for metrics in [self.silence_metrics, self.noise_metrics]:
-            aucs = [np.sum(np.array(metrics['pIA']) >= 0.05 * i) / len(metrics['pIA'])
-                    for i in range(21)]
-            thr = [0.05 * i for i in range(21)]
-            auc = mt.auc(thr, aucs)
-            metrics['metrics']['AUC_N'] = auc
+            if len(metrics['pIA']) > 0:
+                aucs = [np.sum(np.array(metrics['pIA']) >= 0.05 * i) / len(metrics['pIA']) for i in range(21)]
+                thr = [0.05 * i for i in range(21)]
+                auc = mt.auc(thr, aucs)
+                metrics['metrics']['AUC_N'] = auc
 
     def finalize_AP50(self):
         """
@@ -85,8 +90,9 @@ class Evaluator(object):
             float: pIA@0.5 value.
         """
         for metrics in [self.silence_metrics, self.noise_metrics]:
-            ap50 = np.mean(np.array(metrics['pIA']) <= 0.5)
-            metrics['metrics']['ap50'] = ap50
+            if len(metrics['pIA']) > 0:
+                ap50 = np.mean(np.array(metrics['pIA']) <= 0.5)
+                metrics['metrics']['ap50'] = ap50
 
     def finalize_pIA(self):
         """
@@ -96,8 +102,9 @@ class Evaluator(object):
             float: Mean pIA value.
         """
         for metrics in [self.silence_metrics, self.noise_metrics]:
-            pIA_hat = np.mean(np.array(metrics['pIA']))
-            metrics['metrics']['pIA_hat'] = pIA_hat
+            if len(metrics['pIA']) > 0:
+                pIA_hat = np.mean(np.array(metrics['pIA']))
+                metrics['metrics']['pIA_hat'] = pIA_hat
 
     def finalize(self):
         """
