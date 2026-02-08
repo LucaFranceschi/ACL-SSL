@@ -10,7 +10,7 @@ class Evaluator(object):
     def __init__(self, iou_thrs=(0.5, ), default_conf_thr=0.5, pred_size=0.5, pred_thr=0.5,
                  results_dir='./results'):
         """
-        Initialize the Extended Flickr evaluator.
+        Initialize the Extended VGGSS evaluator.
 
         Notes:
             Taking computation speed into consideration, it is set to output only the 'all' subset. (AP, Max-F1)
