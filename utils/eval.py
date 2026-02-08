@@ -792,9 +792,13 @@ def eval_flickr_agg(
 def eval_exvggss_agg(
     model: torch.nn.Module,
     test_dataloader: DataLoader,
+    args,
     result_dir: str,
     epoch: Optional[int] = None,
-    tensorboard_path: Optional[str] = None
+    tensorboard_path: Optional[str] = None,
+    data_path_dict: dict = {},
+    use_cuda = False,
+    use_amp = False
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -821,6 +825,19 @@ def eval_exvggss_agg(
     # Get placeholder text
     prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
 
+    real_san_audio_path = data_path_dict['san'] if args.san_real else None
+
+    neg_audios = get_silence_noise_audios(model,
+        test_dataloader.dataset[0]['audios'].shape,
+        args.san,
+        real_san_audio_path,
+        test_dataloader.dataset.SAMPLE_RATE,
+        test_dataloader.dataset.set_length,
+        use_cuda=use_cuda
+    )
+
+    san_dict = {'san': args.san, 'san_real': args.san_real, **neg_audios}
+
     # Thresholds for evaluation
     thrs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.30, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.70, 0.75, 0.8, 0.85, 0.9, 0.95]
     evaluators = [exvggss_eval.Evaluator() for i in range(len(thrs))]
@@ -829,14 +846,24 @@ def eval_exvggss_agg(
         images, audios, bboxes,  = data['images'], data['audios'], data['bboxes']
         labels, name = data['labels'], data['ids']
 
+        audio_embeddings = {}
+
         # Inference
         placeholder_tokens = model.get_placeholder_token(prompt_template.replace('{}', ''))
         placeholder_tokens = placeholder_tokens.repeat((test_dataloader.batch_size, 1))
         audio_driven_embedding = model.encode_audio(audios.to(model.device), placeholder_tokens, text_pos_at_prompt,
                                                     prompt_length)
 
+        audio_embeddings['pred_emb'] = audio_driven_embedding
+
+        if 'silence_l' in args.loss and args.san:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+
+        if 'noise_l' in args.loss and args.san:
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+
         # Localization result
-        out_dict = model(images.to(model.device), audio_driven_embedding, 224)
+        out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
 
         # Calculate confidence value for extended dataset
         v_f = model.encode_masked_vision(images.to(model.device), audio_driven_embedding)[0]
@@ -845,7 +872,7 @@ def eval_exvggss_agg(
 
         # Evaluation for all thresholds
         for i, thr in enumerate(thrs):
-            evaluators[i].evaluate_batch(out_dict['heatmap'], bboxes, labels, confs, name, thr)
+            evaluators[i].evaluate_batch(**out_dict, gt=bboxes, label=labels, conf=confs, name=name, thr=thr)
 
     # Save result
     os.makedirs(result_dir, exist_ok=True)
@@ -854,13 +881,21 @@ def eval_exvggss_agg(
 
     # Final result
     for i, thr in enumerate(thrs):
-        audio_loc_key, audio_loc_dict = evaluators[i].finalize()
+        std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
-        msg += 'AP={}, Max-F1={}\n'.format(audio_loc_dict['AP'], audio_loc_dict['Max-F1'])
-
+        msg += f'{std_metrics=}'
+        # TODO: finish this once i can execute something...
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/exvggss({thr})', audio_loc_dict, epoch)
+            writer.add_scalars(f'test/std/exvggss({thr})', std_metrics, epoch)
+
+        if 'silence_l' in args.loss and args.san:
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/exvggss/{test_split}({thr})', silence_metrics, epoch)
+
+        if 'noise_l' in args.loss and args.san:
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/exvggss/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:

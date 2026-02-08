@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-from sklearn import metrics
+from sklearn import metrics as mt
 
 import utils.util as util
 
@@ -21,13 +21,33 @@ class Evaluator(object):
         self.min_sizes = {'small': 0, 'medium': 32 ** 2, 'large': 96 ** 2, 'huge': 144 ** 2}
         self.max_sizes = {'small': 32 ** 2, 'medium': 96 ** 2, 'large': 144 ** 2, 'huge': 10000 ** 2}
 
-        self.ciou_list = []
-        self.area_list = []
-        self.confidence_list = []
         self.name_list = []
         self.bb_list = []
-        # self.metrics = ['AP', 'Max-F1', 'LocAcc']
-        self.metrics = ['AP', 'Max-F1']
+        self.confidence_list = []
+        self.area_list = []
+
+        self.std_metrics = {
+            'cIoU': [],
+            'metrics': {
+                'AP': None,
+                'Max-F1': None
+            }
+        }
+        self.silence_metrics = {
+            'cIoU': [],
+            'pIA': [],
+            'metrics': {
+                'AP': None,
+                'Max-F1': None,
+                'AUC': None,
+                'cIoU_ap50': None,
+                'cIoU_hat': None,
+                'AUC_N': None,
+                'pIA_ap50': None,
+                'pIA_hat': None
+            }
+        }
+        self.noise_metrics = self.silence_metrics.copy()
 
         self.results_dir = results_dir
         self.viz_save_dir = f"{results_dir}/viz_conf" + str(default_conf_thr) + "_predsize" + str(
@@ -88,7 +108,7 @@ class Evaluator(object):
         cious = [np.sum(np.array(ciou) >= 0.05 * i) / len(ciou)
                  for i in range(21)]
         thr = [0.05 * i for i in range(21)]
-        auc = metrics.auc(thr, cious)
+        auc = mt.auc(thr, cious)
         return auc
 
     def filter_subset(self, subset, name_list, area_list, bb_list, ciou_list, conf_list):
@@ -114,103 +134,67 @@ class Evaluator(object):
         return name, area, bbox, ciou, conf
 
     def finalize_stats(self):
-        name_full_list, area_full_list, bb_full_list, ciou_full_list, confidence_full_list = self.gather_results()
 
-        metrics = {}
-        for iou_thr in self.iou_thrs:
-            # for subset in ['all', 'visible']:
-            for subset in ['all']:
-                _, _, bb_list, ciou_list, conf_list = self.filter_subset(subset, name_full_list, area_full_list,
-                                                                         bb_full_list, ciou_full_list,
-                                                                         confidence_full_list)
-                subset_name = f'{subset}@{int(iou_thr * 100)}' if subset is not None else f'@{int(iou_thr * 100)}'
-                if len(ciou_list) == 0:
-                    p, r, ap, f1, auc = np.nan, np.nan, np.nan, np.nan, np.nan
-                else:
-                    p, r = self.calc_precision_recall(bb_list, ciou_list, conf_list, -1000, iou_thr)
-                    ap = self.calc_ap(bb_list, ciou_list, conf_list, iou_thr)
-                    auc = self.cal_auc(bb_list, ciou_list)
+        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+            cious = metric['cIoU']
+            for iou_thr in self.iou_thrs:
+                # for subset in ['all', 'visible']:
+                for subset in ['all']:
+                    _, _, bb_list, ciou_list, conf_list = self.filter_subset(subset, self.name_list, self.area_list,
+                                                                            self.bb_list, cious,
+                                                                            self.confidence_list)
+                    subset_name = f'{subset}@{int(iou_thr * 100)}' if subset is not None else f'@{int(iou_thr * 100)}'
+                    if len(ciou_list) == 0:
+                        p, r, ap, f1, auc = np.nan, np.nan, np.nan, np.nan, np.nan
+                    else:
+                        p, r = self.calc_precision_recall(bb_list, ciou_list, conf_list, -1000, iou_thr)
+                        ap = self.calc_ap(bb_list, ciou_list, conf_list, iou_thr)
+                        auc = self.cal_auc(bb_list, ciou_list)
 
-                    conf_thr = list(sorted(conf_list))[::max(1, len(conf_list) // 10)]
-                    pr = [self.calc_precision_recall(bb_list, ciou_list, conf_list, thr, iou_thr) for thr in conf_thr]
-                    f1 = [2 * r * p / (r + p) if r + p > 0 else 0. for p, r in pr]
-                    if subset == 'all' and iou_thr == 0.5:
-                        ef1 = max(f1)
-                        eap = ap
-                        metrics['ef1'] = ef1
-                        metrics['eap'] = eap
-                    if subset == 'visible' and iou_thr == 0.5:
-                        eloc = self.precision_at_50()
-                        eauc = auc
-                        metrics['eloc'] = eloc
-                        metrics['eauc'] = eauc
-                metrics[f'Precision-{subset_name}'] = p
-                # metrics[f'Recall-{subset_name}'] = r
-                if np.isnan(f1).any():
-                    metrics[f'F1-{subset_name}'] = f1
-                else:
-                    metrics[f'F1-{subset_name}'] = ' '.join([f'{f * 100:.1f}' for f in f1])
-                metrics[f'AP-{subset_name}'] = ap
-                metrics[f'AUC-{subset_name}'] = auc
+                        conf_thr = list(sorted(conf_list))[::max(1, len(conf_list) // 10)]
+                        pr = [self.calc_precision_recall(bb_list, ciou_list, conf_list, thr, iou_thr) for thr in conf_thr]
+                        f1 = [2 * r * p / (r + p) if r + p > 0 else 0. for p, r in pr]
+                        if subset == 'all' and iou_thr == 0.5:
+                            ef1 = max(f1)
+                            eap = ap
+                            metric['metrics']['ef1'] = ef1
+                            metric['metrics']['eap'] = eap
+                        if subset == 'visible' and iou_thr == 0.5:
+                            eloc = self.precision_at_50(cious)
+                            eauc = auc
+                            metric['metrics']['eloc'] = eloc
+                            metric['metrics']['eauc'] = eauc
+                    metric['metrics'][f'Precision-{subset_name}'] = p
+                    # metrics[f'Recall-{subset_name}'] = r
+                    if np.isnan(f1).any():
+                        metric['metrics'][f'F1-{subset_name}'] = f1
+                    else:
+                        _ef1 = ' '.join([f'{f * 100:.1f}' for f in f1])
+                        metric['metrics'][f'F1-{subset_name}'] = max([float(num) for num in _ef1.split(' ')])
+                    metric['metrics'][f'AP-{subset_name}'] = ap * 100
+                    metric['metrics'][f'AUC-{subset_name}'] = auc
 
-        return metrics
-
-    def gather_results(self):
-        # import torch.distributed as dist
-        # if not dist.is_initialized():
-        return self.name_list, self.area_list, self.bb_list, self.ciou_list, self.confidence_list
-        # world_size = dist.get_world_size()
-        #
-        # bb_list = [None for _ in range(world_size)]
-        # dist.all_gather_object(bb_list, self.bb_list)
-        # bb_list = [x for bb in bb_list for x in bb]
-        #
-        # area_list = [None for _ in range(world_size)]
-        # dist.all_gather_object(area_list, self.area_list)
-        # area_list = [x for area in area_list for x in area]
-        #
-        # ciou_list = [None for _ in range(world_size)]
-        # dist.all_gather_object(ciou_list, self.ciou_list)
-        # ciou_list = [x for ciou in ciou_list for x in ciou]
-        #
-        # confidence_list = [None for _ in range(world_size)]
-        # dist.all_gather_object(confidence_list, self.confidence_list)
-        # confidence_list = [x for conf in confidence_list for x in conf]
-        #
-        # name_list = [None for _ in range(world_size)]
-        # dist.all_gather_object(name_list, self.name_list)
-        # name_list = [x for name in name_list for x in name]
-        #
-        # return name_list, area_list, bb_list, ciou_list, confidence_list
-
-    def precision_at_50(self):
+    def precision_at_50(self, cious):
         ss = [i for i, bb in enumerate(self.bb_list) if bb > 0]
-        return np.mean(np.array([self.ciou_list[i] for i in ss]) > 0.5)
+        return np.mean(np.array([cious[i] for i in ss]) > 0.5)
 
-    def precision_at_50_object(self):
+    def precision_at_50_object(self, cious):
         max_num_obj = max(self.bb_list)
         for num_obj in range(1, max_num_obj + 1):
             ss = [i for i, bb in enumerate(self.bb_list) if bb == num_obj]
-            precision = np.mean(np.array([self.ciou_list[i] for i in ss]) > 0.5)
+            precision = np.mean(np.array([cious[i] for i in ss]) > 0.5)
             print('\n' + f'num_obj:{num_obj}, precision:{precision}')
 
-    def f1_at_50(self):
+    def f1_at_50(self, cious):
         # conf_thr = np.array(self.confidence_list).mean()
-        p, r = self.calc_precision_recall(self.bb_list, self.ciou_list, self.confidence_list, self.default_conf_thr,
+        p, r = self.calc_precision_recall(self.bb_list, cious, self.confidence_list, self.default_conf_thr,
                                           0.5)
         return 2 * p * r / (p + r) if (p + r) > 0 else 0.
 
-    def ap_at_50(self):
-        return self.calc_ap(self.bb_list, self.ciou_list, self.confidence_list, 0.5)
+    def ap_at_50(self, cious):
+        return self.calc_ap(self.bb_list, cious, self.confidence_list, 0.5)
 
-    def clear(self):
-        self.ciou_list = []
-        self.area_list = []
-        self.confidence_list = []
-        self.name_list = []
-        self.bb_list = []
-
-    def update(self, bb, gt, conf, pred, pred_thr, name):
+    def update(self, bb, gt, conf, pred, pred_thr, name, metric):
         if isinstance(conf, torch.Tensor):
             conf = conf.detach().cpu().numpy()
         if isinstance(pred, torch.Tensor):
@@ -229,26 +213,125 @@ class Evaluator(object):
         area = gt.sum()
 
         # Save
-        self.confidence_list.append(conf)
-        self.ciou_list.append(ciou)
-        self.area_list.append(area)
-        self.name_list.append(name)
-        self.bb_list.append(bb)
+        if metric == 'sil':
+            self.silence_metrics['cIoU'].append(ciou)
+        elif metric == 'noise':
+            self.noise_metrics['cIoU'].append(ciou)
+        elif metric == 'std':
+            self.std_metrics['cIoU'].append(ciou)
+            # common variables
+            self.confidence_list.append(conf)
+            self.area_list.append(area)
+            self.name_list.append(name)
+            self.bb_list.append(bb)
+        return
 
-    def evaluate_batch(self, output, gt, label, conf, name, thr=None):
-        for i in range(output.shape[0]):
-            pred = output[i, 0].detach().cpu().numpy()
+    def evaluate_batch(self, heatmap: torch.Tensor, gt: torch.Tensor, label, conf, name, thr = None, **kwargs) -> None:
+        self._evaluate_batch(heatmap, 'std', gt, label, conf, name, thr)
+
+        sil_heatmap = kwargs.get('sil_heatmap', None)
+        if sil_heatmap != None:
+            self._evaluate_batch(heatmap, 'sil', gt, label, conf, name, thr)
+
+        noise_heatmap = kwargs.get('noise_heatmap', None)
+        if noise_heatmap != None:
+            self._evaluate_batch(heatmap, 'noise', gt, label, conf, name, thr)
+
+    def _evaluate_batch(self, heatmap: torch.Tensor, metric, gt: torch.Tensor, label, conf, name, thr = None):
+        for i in range(heatmap.shape[0]):
+            pred = heatmap[i, 0].detach().cpu().numpy()
             if thr is None:
                 thr = np.sort(pred.flatten())[int(pred.shape[0] * pred.shape[1] * 0.5)]
 
             bb = 1 if label[i] != 'non-sounding' else 0
 
-            self.update(bb, gt[i, 0], conf[i], pred, thr, name[i])
+            self.update(bb, gt[i, 0], conf[i], pred, thr, name[i], metric)
+
+            if metric in ('sil', 'noise'):
+                self.cal_pIA(heatmap, metric, thr)
+
+    def cal_pIA(self, infer: torch.Tensor, metric: str, thres: float = 0.01):
+        '''
+        Calculate the percentage of Image Area as described in:
+            Juanola, Xavier, et al. "Learning from Silence and Noise for Visual Sound Source Localization."
+
+        :param self: Description
+        '''
+        infer_map = torch.zeros_like(infer)
+        infer_map[infer >= thres] = 1
+
+        shape = infer_map.shape
+
+        pIA = torch.sum(infer_map.detach().cpu(), dim=(1, 2)).float() / (shape[1] * shape[2])
+
+        if metric == 'sil':
+            self.silence_metrics['pIA'].append(pIA)
+        elif metric == 'noise':
+            self.noise_metrics['pIA'].append(pIA)
+        elif metric == 'std':
+            self.std_metrics['pIA'].append(pIA)
+        return
+
+    def finalize_AUC(self):
+        """
+        Calculate the Area Under the Curve (AUC).
+
+        Returns:
+            float: AUC value.
+        """
+        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+            if len(metric['cIoU']) > 0:
+                cious = [np.sum(np.array(metric['cIoU']) >= 0.05 * i) / len(metric['cIoU'])
+                        for i in range(21)]
+                thr = [0.05 * i for i in range(21)]
+                auc = mt.auc(thr, cious)
+                metric['metrics']['AUC'] = auc
+
+        for metric in [self.silence_metrics, self.noise_metrics]:
+            if len(metric['pIA']) > 0:
+                aucs = [np.sum(np.array(metric['pIA']) >= 0.05 * i) / len(metric['pIA']) for i in range(21)]
+                thr = [0.05 * i for i in range(21)]
+                auc = mt.auc(thr, aucs)
+                metric['metrics']['AUC_N'] = auc
+
+    def finalize_AP50(self):
+        """
+        Calculate Average Precision (cIoU@0.5).
+
+        Returns:
+            float: cIoU@0.5 value.
+        """
+        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+            if len(metric['cIoU']) > 0:
+                ap50 = np.mean(np.array(metric['cIoU']) <= 0.5)
+                metric['metrics']['cIoU_ap50'] = ap50
+
+        for metric in [self.silence_metrics, self.noise_metrics]:
+            if len(metric['pIA']) > 0:
+                ap50 = np.mean(np.array(metric['pIA']) <= 0.5)
+                metric['metrics']['pIA_ap50'] = ap50
+
+    def finalize_means(self):
+        """
+        Calculate mean cIoU.
+
+        Returns:
+            float: Mean cIoU value.
+        """
+        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+            if len(metric['cIoU']) > 0:
+                ciou = np.mean(np.array(metric['cIoU']))
+                metric['metrics']['cIoU_hat'] = ciou
+
+        for metric in [self.silence_metrics, self.noise_metrics]:
+            if len(metric['pIA']) > 0:
+                pia = np.mean(np.array(metric['pIA']))
+                metric['metrics']['pIA_hat'] = pia
 
     def finalize(self):
-        metric_extend = self.finalize_stats()
-        eap = metric_extend['AP-all@50']
-        ef1 = metric_extend['F1-all@50']
-        # eloc = metric_extend['Precision-visible@50']
-        emaxf1 = max([float(num) for num in ef1.split(' ')])
-        return self.metrics, {self.metrics[0]: eap*100, self.metrics[1]: emaxf1}  # , self.metrics[2]: eloc*100}
+        self.finalize_stats()
+        self.finalize_AUC()
+        self.finalize_AP50()
+        self.finalize_means()
+
+        return self.std_metrics['metrics'], self.silence_metrics['metrics'], self.noise_metrics['metrics']

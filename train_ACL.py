@@ -95,7 +95,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         print(f"Model '{model.__class__.__name__}' with configure file '{model_name}' is loaded")
         print(f"Loaded model details: {vars(model.args.model)}\n")
 
-    training_consumed_sec = 0
     print(args.train_data)
 
     ''' Get dataloader '''
@@ -198,8 +197,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     ''' Make distributed data parallel module '''
     model = DistributedDataParallel(model, device_ids=[device], output_device=device) if USE_DDP else model
     module = model.module if isinstance(model, DistributedDataParallel) else model
-
-    best_pth_dict = {'epoch': 0, 'best_AUC': 0.0}
 
     validation_loss_list = []
     train_loss_list = []
@@ -360,33 +357,25 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
         if rank == 0:
             eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
-                            tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             # eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
             #                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
-                            tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
-                                        tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
-                                        tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            # eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
-            #                 tensorboard_path=tensorboard_path)
-            # if best_pth_dict['best_AUC'] < result_dict['best_AUC']:
-            #     best_pth_dict = result_dict
-            #     shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+            eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
 
         if rank == 1 or not USE_DDP:
             eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
                             tensorboard_path=tensorboard_path)
-            pass
 
     writer.close()
 
     if rank == 0:
-        result_list = str(datetime.timedelta(seconds=training_consumed_sec)).split(".")
-        print("Training time :", result_list[0])
-        print(f"Best epoch: {best_pth_dict['epoch']}")
-
         with open(os.path.join(save_path, 'Train_record', model_exp_name, 'train_losses.pkl'), 'wb') as f:
             np.array(train_loss_list).dump(f)
 
