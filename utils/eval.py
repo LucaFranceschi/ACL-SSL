@@ -266,7 +266,6 @@ def eval_vggsound_agg(
     for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate VGGS({test_split}) dataset...")):
         images, audios = data['images'], data['audios']
         labels, name = data['labels'], data['ids']
-        noisy_audios = data['noisy_audios']
 
         audio_embeddings = {}
 
@@ -277,16 +276,6 @@ def eval_vggsound_agg(
                                                     prompt_length)
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
-
-        if 'diff_san_l' in args.loss:
-            audio_driven_embedding_noisy = model.encode_audio(
-                noisy_audios.to(model.device),
-                placeholder_tokens,
-                text_pos_at_prompt,
-                prompt_length
-            )
-
-            audio_embeddings['pred_emb_noisy'] = audio_driven_embedding_noisy
 
         if 'silence_l' in args.loss and args.san:
             audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
@@ -426,7 +415,6 @@ def eval_vggss_agg(
     for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate VGG-SS({test_split}) dataset...")):
         images, audios, bboxes = data['images'], data['audios'], data['bboxes']
         labels, name = data['labels'], data['ids']
-        noisy_audios = data['noisy_audios']
 
         audio_embeddings = {}
 
@@ -437,16 +425,6 @@ def eval_vggss_agg(
                                                     prompt_length)
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
-
-        if 'diff_san_l' in args.loss:
-            audio_driven_embedding_noisy = model.encode_audio(
-                noisy_audios.to(model.device),
-                placeholder_tokens,
-                text_pos_at_prompt,
-                prompt_length
-            )
-
-            audio_embeddings['pred_emb_noisy'] = audio_driven_embedding_noisy
 
         if 'silence_l' in args.loss and args.san:
             audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
@@ -459,7 +437,7 @@ def eval_vggss_agg(
 
         # Evaluation for all thresholds
         for i, thr in enumerate(thrs):
-            evaluators[i].evaluate_batch(**out_dict, target=bboxes, thr=thr)
+            evaluators[i].evaluate_batch(**out_dict, target=bboxes.to(model.device), thr=thr)
 
         # Visual results
         for j in range(test_dataloader.batch_size):
@@ -533,9 +511,13 @@ def eval_vggss_agg(
 def eval_avsbench_agg(
     model: torch.nn.Module,
     test_dataloader: DataLoader,
+    args,
     result_dir: str,
     epoch: Optional[int] = None,
-    tensorboard_path: Optional[str] = None
+    tensorboard_path: Optional[str] = None,
+    data_path_dict: dict = {},
+    use_cuda = False,
+    use_amp = False
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -553,6 +535,8 @@ def eval_avsbench_agg(
     Notes:
         The evaluation includes threshold optimization for AVSBench.
     '''
+    gt_resolution = (args.ground_truth_resolution, args.ground_truth_resolution)
+
     if tensorboard_path is not None and epoch is not None:
         os.makedirs(tensorboard_path, exist_ok=True)
         writer = SummaryWriter(tensorboard_path)
@@ -562,6 +546,19 @@ def eval_avsbench_agg(
     # Get placeholder text
     prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
 
+    real_san_audio_path = data_path_dict['san'] if args.san_real else None
+
+    neg_audios = get_silence_noise_audios(model,
+        test_dataloader.dataset[0]['audios'].shape,
+        args.san,
+        real_san_audio_path,
+        test_dataloader.dataset.SAMPLE_RATE,
+        test_dataloader.dataset.set_length,
+        use_cuda=use_cuda
+    )
+
+    san_dict = {'san': args.san, 'san_real': args.san_real, **neg_audios}
+
     # Thresholds for evaluation
     thrs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.30, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.70, 0.75, 0.8, 0.85, 0.9, 0.95]
     evaluators = [avsbench_eval.Evaluator() for i in range(len(thrs))]
@@ -569,18 +566,28 @@ def eval_avsbench_agg(
     for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate AVSBench dataset({test_split})...")):
         images, audios, gts, labels, name = data['images'], data['audios'], data['gts'], data['labels'], data['ids']
 
+        audio_embeddings = {}
+
         # Inference
         placeholder_tokens = model.get_placeholder_token(prompt_template.replace('{}', ''))
         placeholder_tokens = placeholder_tokens.repeat((test_dataloader.batch_size, 1))
         audio_driven_embedding = model.encode_audio(audios.to(model.device), placeholder_tokens, text_pos_at_prompt,
                                                     prompt_length)
 
+        audio_embeddings['pred_emb'] = audio_driven_embedding
+
+        if 'silence_l' in args.loss and args.san:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+
+        if 'noise_l' in args.loss and args.san:
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+
         # Localization result
-        out_dict = model(images.to(model.device), audio_driven_embedding, 224)
+        out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
 
         # Evaluation for all thresholds
         for i, thr in enumerate(thrs):
-            evaluators[i].evaluate_batch(out_dict['heatmap'], gts.to(model.device), thr)
+            evaluators[i].evaluate_batch(**out_dict, target=gts.to(model.device), thr=thr)
 
         # Visual results
         for j in range(test_dataloader.batch_size):
@@ -592,13 +599,11 @@ def eval_avsbench_agg(
 
         # Overall figure
         for j in range(test_dataloader.batch_size):
-            original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.png')).resize(
-                (224, 224))
-            gt_image = Image.open(os.path.join(test_dataloader.dataset.gt_path, name[j] + '.png')).resize(
-                (224, 224)).point(
+            original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.png')).resize(gt_resolution)
+            gt_image = Image.open(os.path.join(test_dataloader.dataset.gt_path, name[j] + '.png')).resize(gt_resolution).point(
                 lambda p: 255 - p)
-            heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize((224, 224))
-            seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize((224, 224)).point(
+            heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution)
+            seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution).point(
                 lambda p: 0 if p / 255 < 0.5 else 255)
 
             draw_overall(result_dir, original_image, gt_image, heatmap_image, seg_image, labels[j], name[j])
@@ -611,13 +616,30 @@ def eval_avsbench_agg(
 
     # Final result
     for i, thr in enumerate(thrs):
-        audio_loc_key, audio_loc_dict = evaluators[i].finalize()
+        std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
-        msg += 'mIoU={}, F={}\n'.format(audio_loc_dict['mIoU'], audio_loc_dict['Fmeasure'])
+        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/avs({test_split})({thr})', audio_loc_dict, epoch)
+            writer.add_scalars(f'test/std/avs({test_split})({thr})', std_metrics, epoch)
+
+        if 'silence_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["mIoU"]=}, {silence_metrics["Fmeasure"]=}\n'
+            msg += f'{silence_metrics["cIoU_ap50"]=}, {silence_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/avs/{test_split}({thr})', silence_metrics, epoch)
+
+        if 'noise_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["mIoU"]=}, {noise_metrics["Fmeasure"]=}\n'
+            msg += f'{noise_metrics["cIoU_ap50"]=}, {noise_metrics["AUC"]=}, {noise_metrics["cIoU_hat"]=}\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/avs/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:

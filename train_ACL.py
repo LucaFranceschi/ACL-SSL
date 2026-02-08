@@ -363,8 +363,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             #                 tensorboard_path=tensorboard_path)
             # eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
             #                 tensorboard_path=tensorboard_path)
-            # eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
-            #                 tensorboard_path=tensorboard_path)
+            eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
+                            tensorboard_path=tensorboard_path)
             eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
                                         tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
@@ -376,8 +376,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             #     shutil.copyfile(save_dir, os.path.join(save_path, 'Train_record', model_exp_name, f'Param_best.pth'))
 
         if rank == 1 or not USE_DDP:
-            # eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
-            #                 tensorboard_path=tensorboard_path)
+            eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
+                            tensorboard_path=tensorboard_path)
             pass
 
     writer.close()
