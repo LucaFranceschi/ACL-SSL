@@ -203,7 +203,7 @@ class Evaluator(object):
             gt = gt.detach().cpu().numpy()
 
         # Compute binary prediction map
-        infer = np.zeros((224, 224))
+        infer = torch.zeros_like(gt)
         infer[pred >= pred_thr] = 1
 
         # Compute ciou between prediction and ground truth

@@ -142,7 +142,11 @@ class VGGSSDataset(Dataset):
         Returns:
             torch.Tensor: Audio data.
         """
-        audio_file, _ = torchaudio.load(os.path.join(self.audio_path, self.file_list[item] + '.wav'))
+        audio_file, sr = torchaudio.load(os.path.join(self.audio_path, self.file_list[item] + '.wav'))
+
+        if sr != self.SAMPLE_RATE:
+            resampler = torchaudio.transforms.Resample(sr, self.SAMPLE_RATE)
+            audio_file = resampler(audio_file)
 
         if audio_file.shape[0] > 1:
             audio_file = audio_file.mean(dim=0)

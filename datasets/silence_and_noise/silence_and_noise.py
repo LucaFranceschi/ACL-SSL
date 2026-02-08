@@ -25,7 +25,11 @@ def get_real_noise_audios(real_san_audios_path, SAMPLE_RATE = 16000, set_length:
     audio_files = []
 
     for audio_path in audio_paths:
-        audio_file, _ = torchaudio.load(os.path.join(real_san_audios_path, audio_path))
+        audio_file, sr = torchaudio.load(os.path.join(real_san_audios_path, audio_path))
+
+        if sr != SAMPLE_RATE:
+            resampler = torchaudio.transforms.Resample(sr, SAMPLE_RATE)
+            audio_file = resampler(audio_file)
 
         audio_files.append(process_audio(audio_file, SAMPLE_RATE, set_length))
 

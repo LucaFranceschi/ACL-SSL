@@ -292,7 +292,12 @@ class ExtendFlickrDataset(Dataset):
         Returns:
             torch.Tensor: Audio data.
         """
-        audio_file, _ = torchaudio.load(os.path.join(self.audio_path, self.audio_files[item]))
+        audio_file, sr = torchaudio.load(os.path.join(self.audio_path, self.audio_files[item]))
+
+        if sr != self.SAMPLE_RATE:
+            resampler = torchaudio.transforms.Resample(sr, self.SAMPLE_RATE)
+            audio_file = resampler(audio_file)
+
         audio_file = audio_file.squeeze(0)
 
         # slicing or padding based on set_length

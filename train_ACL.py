@@ -358,13 +358,13 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         if rank == 0:
             eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            # eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
-            #                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+            eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
+                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
+            eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
                 tensorboard_path, data_path_dict, USE_CUDA, config['amp'])

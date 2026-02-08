@@ -82,7 +82,12 @@ class AVSBenchDataset(Dataset):
         Returns:
             torch.Tensor: Audio data.
         """
-        audio_file, _ = torchaudio.load(os.path.join(self.audio_path, self.file_list[item][:-2] + '.wav'))
+        audio_file, sr = torchaudio.load(os.path.join(self.audio_path, self.file_list[item][:-2] + '.wav'))
+
+        if sr != self.SAMPLE_RATE:
+            resampler = torchaudio.transforms.Resample(sr, self.SAMPLE_RATE)
+            audio_file = resampler(audio_file)
+
         audio_file = torch.concat([audio_file[0], audio_file[1]], dim=0)  # Stereo 5 sec -> 10 sec
         audio_file = audio_file.squeeze(0)
 
