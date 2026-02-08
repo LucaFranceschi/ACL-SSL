@@ -100,13 +100,14 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     ''' Get dataloader '''
     # Get Train Dataloader (VGGSS)
-    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_train', is_train=True,
+    subset = ''
+    train_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_train{subset}', is_train=True,
                                     input_resolution=args.input_resolution, noise_transform=args.san_added_noise_tr, set_length=3)
 
-    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_val', is_train=False,
+    validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_val{subset}', is_train=False,
                                     input_resolution=args.input_resolution, set_length=3)
 
-    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], 'vggsound_test', is_train=False,
+    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_test{subset}', is_train=False,
                                     input_resolution=args.ground_truth_resolution, set_length=3)
 
     ''' Create DistributedSampler '''
@@ -364,8 +365,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             #                 tensorboard_path=tensorboard_path)
             # eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
             #                 tensorboard_path=tensorboard_path)
-            # result_dict = eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
-            #                             tensorboard_path=tensorboard_path)
+            eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
+                                        tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             result_dict = eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
                                         tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
             # eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
