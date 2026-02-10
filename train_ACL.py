@@ -228,8 +228,8 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         loss_dict = {}
         loss_per_epoch_dict = {loss_name: 0.0 for loss_name in args.loss}
 
-        train_dataloader.dataset.audio_transform.step(0, epoch, args.san_added_noise_schedule_k)
         train_dataloader.dataset.epoch = epoch
+        train_dataloader.dataset.audio_transform.step(0, epoch, args.san_added_noise_schedule_k)
 
         pbar = tqdm(train_dataloader, desc=f"Train Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
         sampler.set_epoch(epoch) if USE_DDP else None

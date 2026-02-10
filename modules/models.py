@@ -10,7 +10,7 @@ from modules.AudioToken.embedder import FGAEmbedder
 from modules.CLIPSeg.clipseg_for_audio import CLIPSeg
 from modules.mask_utils import ImageMasker, FeatureMasker
 from transformers import AutoTokenizer
-
+from torch.utils.checkpoint import checkpoint
 
 class ACL(nn.Module):
     def __init__(self, conf_file: str, device: str, model_path: str):
@@ -134,19 +134,7 @@ class ACL(nn.Module):
 
         return pooled_output
 
-    def forward_decoder(self, image: torch.Tensor, embedding: torch.Tensor, resolution: int = 224) -> torch.Tensor:
-        """
-        Forward pass of audio-visual grounder
-
-        Args:
-            image (torch.Tensor): Input image tensor.
-            embedding (torch.Tensor): Condition embedding tensor for grounder.
-            resolution (int): Resolution of the output.
-            ignore_indices (list): List of indices to ignore.
-
-        Returns:
-            torch.Tensor: Logits from the decoder.
-        """
+    def _forward_decoder(self, image: torch.Tensor, embedding: torch.Tensor) -> torch.Tensor:
         # step 1: forward the query images through the frozen CLIP vision encoder
         vision_outputs = self.av_grounder.clip.vision_model(pixel_values=image,
                                                             output_attentions=None,
@@ -168,7 +156,22 @@ class ACL(nn.Module):
             output_hidden_states=None,
             return_dict=True,
         )
-        logits = decoder_outputs.logits
+        return decoder_outputs.logits
+
+    def forward_decoder(self, image: torch.Tensor, embedding: torch.Tensor, resolution: int = 224) -> torch.Tensor:
+        """
+        Forward pass of audio-visual grounder
+
+        Args:
+            image (torch.Tensor): Input image tensor.
+            embedding (torch.Tensor): Condition embedding tensor for grounder.
+            resolution (int): Resolution of the output.
+            ignore_indices (list): List of indices to ignore.
+
+        Returns:
+            torch.Tensor: Logits from the decoder.
+        """
+        logits = checkpoint(self._forward_decoder, image, embedding, use_reentrant=False)
 
         if logits.ndim == 2:
             logits = logits.unsqueeze(0).unsqueeze(1)
@@ -214,6 +217,21 @@ class ACL(nn.Module):
 
         return logits
 
+    def _vision_impl(self, pixel_values):
+        """
+        Helper to run just the vision model.
+        This allows us to checkpoint the massive ViT pass.
+        """
+        # We only need the pooled output (index 1) usually, but your code uses hidden states too.
+        # For encode_masked_vision, you only use [1] (pooled).
+        outputs = self.av_grounder.clip.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=None,
+            output_hidden_states=True,
+            return_dict=True
+        )
+        return outputs
+
     def encode_masked_vision(self, image: torch.Tensor, embedding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, float, float]:
         """
         Encode masked visual feature both image-level and feature-level.
@@ -243,10 +261,8 @@ class ACL(nn.Module):
         feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask) / (feature_mask.sum() + 1e-6)
 
         # step 1: forward the query images through the frozen CLIP vision encoder
-        masked_vision_outputs = self.av_grounder.clip.vision_model(pixel_values=image * image_mask,
-                                                                   output_attentions=None,
-                                                                   output_hidden_states=True,
-                                                                   return_dict=True)
+        masked_vision_outputs = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+
         masked_image_emb = self.av_grounder.clip.visual_projection(masked_vision_outputs[1])
 
         return feature_masked_emb, masked_image_emb, positive_area, negative_area

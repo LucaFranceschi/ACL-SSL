@@ -77,9 +77,9 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
     neg_audios.append(kwargs.get('pred_emb_san', None))
     neg_audios.append(kwargs.get('pred_emb_real_san', None))
     neg_audios = [val for val in neg_audios if val is not None]
-    neg_audios = torch.cat(neg_audios, dim=0)
+    if len(neg_audios) > 0:
+        neg_audios = torch.cat(neg_audios, dim=0)
 
-    if neg_audios.shape[0] > 0:
         # neg_audios has shape [K, C]
         # b is already broadcasted in the uncommented version
         # neg_audios = neg_audios.unsqueeze(1).repeat(1, B, 1)
@@ -88,9 +88,9 @@ def acl_f(v_f: torch.Tensor, pred_emb: torch.Tensor, beta: float = 1 / 0.07, **k
 
         logits = torch.cat((logits, neg_sim), dim=1)
 
-    labels = torch.arange(B).long().to(pred_emb.device)
+    labels = torch.eye(logits.shape[0], logits.shape[1], device=pred_emb.device)
 
-    loss = 0.5 * (F.cross_entropy(logits * beta, labels) + F.cross_entropy(logits[:, :B].T * beta, labels))
+    loss = 0.5 * (F.cross_entropy(logits * beta, labels) + F.cross_entropy(logits.T * beta, labels.T))
 
     return loss
 
