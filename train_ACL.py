@@ -126,12 +126,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
                                                     num_workers=args.num_workers, pin_memory=False, drop_last=True,
                                                     worker_init_fn=seed_worker, shuffle=False)
 
-    # Get Test Dataloader (VGGSS)
-    vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test', is_train=False,
-                                 input_resolution=args.input_resolution)
-    vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=True)
-
     if args.train_data == 'vggss_heard':
         # Get Test Dataloader (VGGSS)
         heard_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_heard_test', is_train=False,
@@ -144,32 +138,38 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         unheard_dataloader = torch.utils.data.DataLoader(unheard_dataset, batch_size=1, shuffle=False, num_workers=1,
                                                          pin_memory=False, drop_last=False)
 
+    # Get Test Dataloader (VGGSS)
+    vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test', is_train=False,
+                                 input_resolution=args.input_resolution)
+    vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                   pin_memory=False, drop_last=True)
+
     # Get Test Dataloader (Flickr)
     flickr_dataset = FlickrDataset(data_path_dict['flickr'], 'flickr_test', is_train=False,
                                    input_resolution=args.input_resolution)
-    flickr_dataloader = torch.utils.data.DataLoader(flickr_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                    pin_memory=False, drop_last=False)
+    flickr_dataloader = torch.utils.data.DataLoader(flickr_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                    pin_memory=False, drop_last=True)
 
     # Get Test Dataloader (Extended VGGSS)
     exvggss_dataset = ExtendVGGSSDataset(data_path_dict['vggss'], input_resolution=args.input_resolution)
-    exvggss_dataloader = torch.utils.data.DataLoader(exvggss_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                     pin_memory=False, drop_last=False)
+    exvggss_dataloader = torch.utils.data.DataLoader(exvggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                     pin_memory=False, drop_last=True)
 
     # Get Test Dataloader (Extended Flickr)
     exflickr_dataset = ExtendFlickrDataset(data_path_dict['flickr'], input_resolution=args.input_resolution)
-    exflickr_dataloader = torch.utils.data.DataLoader(exflickr_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                      pin_memory=False, drop_last=False)
+    exflickr_dataloader = torch.utils.data.DataLoader(exflickr_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                      pin_memory=False, drop_last=True)
 
     # Get Test Dataloader (AVS)
     avss4_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_s4_test', is_train=False,
                                     input_resolution=args.input_resolution)
-    avss4_dataloader = torch.utils.data.DataLoader(avss4_dataset, batch_size=5, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=False)
+    avss4_dataloader = torch.utils.data.DataLoader(avss4_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                   pin_memory=False, drop_last=True)
 
     avsms3_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_ms3_test', is_train=False,
                                      input_resolution=args.input_resolution)
-    avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=5, shuffle=False, num_workers=1,
-                                                    pin_memory=False, drop_last=False)
+    avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                    pin_memory=False, drop_last=True)
 
     ''' Optimizer '''
     module_path, module_name = args.optim.pop('module_path'), args.optim.pop('module_name')

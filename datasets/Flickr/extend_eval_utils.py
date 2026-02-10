@@ -29,16 +29,15 @@ class Evaluator(object):
         self.std_metrics = {
             'cIoU': [],
             'metrics': {
-                'AP': None,
-                'Max-F1': None
+                'AUC': None,
+                'cIoU_ap50': None,
+                'cIoU_hat': None
             }
         }
         self.silence_metrics = {
             'cIoU': [],
             'pIA': [],
             'metrics': {
-                'AP': None,
-                'Max-F1': None,
                 'AUC': None,
                 'cIoU_ap50': None,
                 'cIoU_hat': None,
@@ -203,7 +202,7 @@ class Evaluator(object):
             gt = gt.detach().cpu().numpy()
 
         # Compute binary prediction map
-        infer = torch.zeros_like(gt)
+        infer = np.zeros_like(gt)
         infer[pred >= pred_thr] = 1
 
         # Compute ciou between prediction and ground truth
@@ -239,16 +238,16 @@ class Evaluator(object):
 
     def _evaluate_batch(self, heatmap: torch.Tensor, metric, gt: torch.Tensor, label, conf, name, thr = None):
         for i in range(heatmap.shape[0]):
-            pred = heatmap[i, 0].detach().cpu().numpy()
+            pred = heatmap[i].detach().cpu()
             if thr is None:
                 thr = np.sort(pred.flatten())[int(pred.shape[0] * pred.shape[1] * 0.5)]
 
             bb = 1 if label[i] != 'non-sounding' else 0
 
-            self.update(bb, gt[i, 0], conf[i], pred, thr, name[i], metric)
+            self.update(bb, gt[i], conf[i], pred, thr, name[i], metric)
 
             if metric in ('sil', 'noise'):
-                self.cal_pIA(heatmap, metric, thr)
+                self.cal_pIA(pred, metric, thr)
 
     def cal_pIA(self, infer: torch.Tensor, metric: str, thres: float = 0.01):
         '''

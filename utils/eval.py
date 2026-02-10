@@ -620,7 +620,7 @@ def eval_avsbench_agg(
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
         msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/std/avs({test_split})({thr})', std_metrics, epoch)
@@ -761,7 +761,7 @@ def eval_flickr_agg(
         std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/std/flickr/{test_split}({thr})', std_metrics, epoch)
@@ -884,16 +884,22 @@ def eval_exvggss_agg(
         std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
-        msg += f'{std_metrics=}'
-        # TODO: finish this once i can execute something...
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/exvggss({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std/exvggss/{test_split}({thr})', std_metrics, epoch)
 
         if 'silence_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["cIoU_ap50"]=}, {silence_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
             if tensorboard_path is not None and epoch is not None:
                 writer.add_scalars(f'test/silence/exvggss/{test_split}({thr})', silence_metrics, epoch)
 
         if 'noise_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["cIoU_ap50"]=}, {noise_metrics["AUC"]=}, {noise_metrics["cIoU_hat"]=}\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
             if tensorboard_path is not None and epoch is not None:
                 writer.add_scalars(f'test/noise/exvggss/{test_split}({thr})', noise_metrics, epoch)
 
@@ -1001,16 +1007,22 @@ def eval_exflickr_agg(
         std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
-        msg += f'{std_metrics=}'
-        # TODO: finish this once i can execute something...
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/exflickr({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std/exflickr/{test_split}({thr})', std_metrics, epoch)
 
         if 'silence_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["cIoU_ap50"]=}, {silence_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
             if tensorboard_path is not None and epoch is not None:
                 writer.add_scalars(f'test/silence/exflickr/{test_split}({thr})', silence_metrics, epoch)
 
         if 'noise_l' in args.loss and args.san:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["cIoU_ap50"]=}, {noise_metrics["AUC"]=}, {noise_metrics["cIoU_hat"]=}\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
             if tensorboard_path is not None and epoch is not None:
                 writer.add_scalars(f'test/noise/exflickr/{test_split}({thr})', noise_metrics, epoch)
 

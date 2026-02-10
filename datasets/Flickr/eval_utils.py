@@ -67,7 +67,7 @@ class Evaluator(object):
             if thr is None:
                 thr = np.sort(infer.detach().cpu().numpy().flatten())[int(infer.shape[1] * infer.shape[2] / 2)]
 
-            self.cal_CIOU(infer, target, metric, thr) # cIoU always computed
+            self.cal_CIOU(infer, target[j], metric, thr) # cIoU always computed
             if metric in ('sil', 'noise'):
                 self.cal_pIA(infer, metric, thr)
 
@@ -85,7 +85,7 @@ class Evaluator(object):
         """
         infer_map = torch.zeros_like(gtmap)
         infer_map[infer >= thres] = 1
-        ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1))
+        ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1) + 1e-12)
         ciou = ciou.detach().cpu().float()
 
         if metric == 'sil':

@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from sklearn import metrics as mt
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 
 class Evaluator(object):
@@ -16,9 +16,11 @@ class Evaluator(object):
             metrics (List[str]): List of metric names.
         """
         super(Evaluator, self).__init__()
+        self.N = 0
         self.std_metrics = {
             'mIoU': [],
             'F_values': [],
+            'cIoU': [],
             'metrics': {
                 'mIoU': None,
                 'Fmeasure': None
@@ -76,7 +78,7 @@ class Evaluator(object):
             else:
                 thrs.append(thr)
 
-            self.cal_CIOU(infer, target, metric, thr) # cIoU always computed
+            self.cal_CIOU(infer, target[j], metric, thr) # cIoU always computed
             if metric in ('sil', 'noise'):
                 self.cal_pIA(infer, metric, thr)
 
@@ -98,7 +100,7 @@ class Evaluator(object):
         """
         infer_map = torch.zeros_like(gtmap)
         infer_map[infer >= thres] = 1
-        ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1))
+        ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1) + 1e-12)
         ciou = ciou.detach().cpu().float()
 
         if metric == 'sil':
