@@ -29,9 +29,6 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
 
     model_exp_name = os.listdir(os.path.join(save_path, 'Train_record'))[0]
 
-    ''' Set logging dir '''
-    tensorboard_path = os.path.join(save_path, 'Test_record', model_exp_name, "tensorboard")
-
     ''' Get train configure '''
     train_conf_file = f'./config/train/{train_config_name}.yaml'
     with open(train_conf_file) as f:
@@ -87,6 +84,9 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
 
     for epoch in epoch_list:
         print(f'Testing epoch {epoch}')
+
+        ''' Set logging dir '''
+        tensorboard_path = os.path.join(save_path, 'Test_record', model_exp_name, "tensorboard", f'epoch{epoch}')
 
         viz_dir_template = os.path.join(save_path, 'Visual_results_test', '{}', model_exp_name, f'epoch{epoch}')
 
