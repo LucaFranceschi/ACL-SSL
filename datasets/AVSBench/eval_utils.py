@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from sklearn import metrics as mt
 from typing import List, Tuple, Dict, Optional
+import copy
 
 
 class Evaluator(object):
@@ -43,7 +44,7 @@ class Evaluator(object):
                 'pIA_hat': None
             }
         }
-        self.noise_metrics = self.silence_metrics.copy()
+        self.noise_metrics = copy.deepcopy(self.silence_metrics)
 
     def evaluate_batch(self, heatmap: torch.Tensor, target: torch.Tensor, thr: Optional[float] = None, **kwargs) -> None:
 

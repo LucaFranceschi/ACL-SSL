@@ -17,8 +17,8 @@ class Evaluator(object):
         """
         super(Evaluator, self).__init__()
         self.std_metrics = {}
-        self.silence_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'ap50': None, 'pIA_hat': None}}
-        self.noise_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'ap50': None, 'pIA_hat': None}}
+        self.silence_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'pIA_ap50': None, 'pIA_hat': None}}
+        self.noise_metrics = {'pIA': [], 'metrics': {'AUC_N': None, 'pIA_ap50': None, 'pIA_hat': None}}
 
     def evaluate_batch(self, heatmap: torch.Tensor, thr: Optional[float] = None, **kwargs) -> None:
         """
@@ -92,7 +92,7 @@ class Evaluator(object):
         for metrics in [self.silence_metrics, self.noise_metrics]:
             if len(metrics['pIA']) > 0:
                 ap50 = np.mean(np.array(metrics['pIA']) <= 0.5)
-                metrics['metrics']['ap50'] = ap50
+                metrics['metrics']['pIA_ap50'] = ap50
 
     def finalize_pIA(self):
         """

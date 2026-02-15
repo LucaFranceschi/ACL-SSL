@@ -4,6 +4,7 @@ import torch
 from sklearn import metrics as mt
 
 import utils.util as util
+import copy
 
 
 class Evaluator(object):
@@ -46,7 +47,7 @@ class Evaluator(object):
                 'pIA_hat': None
             }
         }
-        self.noise_metrics = self.silence_metrics.copy()
+        self.noise_metrics = copy.deepcopy(self.silence_metrics)
 
         self.results_dir = results_dir
         self.viz_save_dir = f"{results_dir}/viz_conf" + str(default_conf_thr) + "_predsize" + str(
@@ -230,11 +231,11 @@ class Evaluator(object):
 
         sil_heatmap = kwargs.get('sil_heatmap', None)
         if sil_heatmap != None:
-            self._evaluate_batch(heatmap, 'sil', gt, label, conf, name, thr)
+            self._evaluate_batch(sil_heatmap, 'sil', gt, label, conf, name, thr)
 
         noise_heatmap = kwargs.get('noise_heatmap', None)
         if noise_heatmap != None:
-            self._evaluate_batch(heatmap, 'noise', gt, label, conf, name, thr)
+            self._evaluate_batch(noise_heatmap, 'noise', gt, label, conf, name, thr)
 
     def _evaluate_batch(self, heatmap: torch.Tensor, metric, gt: torch.Tensor, label, conf, name, thr = None):
         for i in range(heatmap.shape[0]):

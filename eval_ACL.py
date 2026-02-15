@@ -82,6 +82,12 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
     model_weights_names = os.listdir(os.path.join(save_path, 'Train_record', model_exp_name))
     epoch_list = sorted(int(m.group(1)) for s in model_weights_names if (m := re.match(r'Param_(\d+).pth', s)))
 
+    best_scores = {
+        'best_AUC': {'epoch': 0, 'AUC': 0.0, 'thr': 0.0},
+        'best_AUC_N_silence': {'epoch': 0, 'AUC': 0.0, 'thr': 0.0},
+        'best_AUC_N_noise': {'epoch': 0, 'AUC': 0.0, 'thr': 0.0}
+    }
+
     for epoch in epoch_list:
         print(f'Testing epoch {epoch}')
 
@@ -107,7 +113,7 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
             tensorboard_path, data_path_dict, USE_CUDA)
         eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
             tensorboard_path, data_path_dict, USE_CUDA)
-        eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
+        result_dict = eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
             tensorboard_path, data_path_dict, USE_CUDA)
         eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
             tensorboard_path, data_path_dict, USE_CUDA)
@@ -116,6 +122,22 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
         eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
             tensorboard_path, data_path_dict, USE_CUDA)
 
+        if result_dict['best_AUC'][0] > best_scores['best_AUC']['AUC']:
+            best_scores['best_AUC']['epoch'] = epoch
+            best_scores['best_AUC']['AUC'] = result_dict['best_AUC'][0]
+            best_scores['best_AUC']['thr'] = result_dict['best_AUC'][1]
+
+        if result_dict['best_AUC_silence'][0] > best_scores['best_AUC_N_silence']['AUC']:
+            best_scores['best_AUC_N_silence']['epoch'] = epoch
+            best_scores['best_AUC_N_silence']['AUC'] = result_dict['best_AUC_silence'][0]
+            best_scores['best_AUC_N_silence']['thr'] = result_dict['best_AUC_silence'][1]
+
+        if result_dict['best_AUC_noise'][0] > best_scores['best_AUC_N_noise']['AUC']:
+            best_scores['best_AUC_N_noise']['epoch'] = epoch
+            best_scores['best_AUC_N_noise']['AUC'] = result_dict['best_AUC_noise'][0]
+            best_scores['best_AUC_N_noise']['thr'] = result_dict['best_AUC_noise'][1]
+
+    print(best_scores)
     exit(0)
 
 if __name__ == "__main__":

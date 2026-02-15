@@ -352,26 +352,26 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
         gc.collect()
 
-    ''' Evaluate '''
-    with torch.no_grad():
+    # ''' Evaluate '''
+    # with torch.no_grad():
 
-        if rank == 0:
-            eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-            eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
-                tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #     if rank == 0:
+    #         eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #         eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #         eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #         eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #         eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
+    #         eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
+    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
 
-        if rank == 1 or not USE_DDP:
-            eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
-                            tensorboard_path=tensorboard_path)
+    #     if rank == 1 or not USE_DDP:
+    #         eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
+    #                         tensorboard_path=tensorboard_path)
 
     writer.close()
 
