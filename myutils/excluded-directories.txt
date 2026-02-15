@@ -36,3 +36,5 @@ wandb
 *.sif
 
 precomputed*
+
+.venv
