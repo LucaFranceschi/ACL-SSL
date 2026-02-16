@@ -50,7 +50,7 @@ class VGGSoundDataset(Dataset):
         subset = set([item[3] for item in csv.reader(open(self.csv_dir))])
         self.file_list = list(audio_files.intersection(image_files).intersection(subset))
         self.file_list = sorted(self.file_list)
-        print(f'Intersection of {len(audio_files)}a, {len(image_files)}i and {len(subset)}l is {len(self.file_list)}')
+        # print(f'Intersection of {len(audio_files)}a, {len(image_files)}i and {len(subset)}l is {len(self.file_list)}')
 
         ''' Transform '''
         if is_train:
