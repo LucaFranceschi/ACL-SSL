@@ -38,3 +38,5 @@ wandb
 precomputed*
 
 .venv
+
+*/AVATAR/metadata

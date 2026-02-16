@@ -38,3 +38,6 @@ train_outputs
 val_audios
 
 wandb
+
+*/AVATAR/metadata
+**/video
