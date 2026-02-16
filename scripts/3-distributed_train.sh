@@ -30,3 +30,5 @@ train_ACL.py \
 --san_path $DATA/silence_and_noise/audio \
 --save_path $SAVE_PATH \
 --wandb_logging
+
+# --recover_from $REPO/train_outputs/2059437/Train_record/ACL_ViT16_aclifa_2gpu/Param_5.pth \

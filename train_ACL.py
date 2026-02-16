@@ -27,12 +27,13 @@ from torch.utils.data.distributed import DistributedSampler
 import numpy as np
 
 import gc
+import re
 
 from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
 
 import wandb
 
-def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path):
+def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path, recover_from = None):
     """
     Main function for training an image compression model.
 
@@ -198,6 +199,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     model = DistributedDataParallel(model, device_ids=[device], output_device=device) if USE_DDP else model
     module = model.module if isinstance(model, DistributedDataParallel) else model
 
+    if recover_from != None:
+        module.load(recover_from)
+        recovered_epoch = int(re.search(r'Param_(\d+).pth', recover_from).group(1))
+
     validation_loss_list = []
     train_loss_list = []
 
@@ -233,6 +238,10 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
         pbar = tqdm(train_dataloader, desc=f"Train Epoch [{epoch}/{args.epoch}]", disable=(rank != 0))
         sampler.set_epoch(epoch) if USE_DDP else None
+
+        if recover_from != None and epoch <= recovered_epoch:
+            continue
+
         for step, data in enumerate(pbar):
             images, audios, labels = data['images'], data['audios'], data['labels']
             noisy_audios = data['noisy_audios']
@@ -398,6 +407,7 @@ if __name__ == "__main__":
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
     parser.add_argument('--san_path', type=str, default='', help='Silence and noise data directory')
     parser.add_argument('--local_rank', type=str, default='', help='Rank for distributed train')
+    parser.add_argument('--recover_from', type=str, default=None, help='Path to weights for recover after crash')
     parser.add_argument('--wandb_logging', action='store_true', help='Login to wandb and log losses and experiments')
 
     args = parser.parse_args()
@@ -422,4 +432,4 @@ if __name__ == "__main__":
         wandb.login(os.getenv('WANDB_API_KEY'))
 
     # Run example
-    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path)
+    main(args.model_name, args.model_path, args.exp_name, args.train_config, data_path, args.save_path, args.recover_from)
