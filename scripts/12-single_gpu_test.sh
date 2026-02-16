@@ -26,5 +26,6 @@ python eval_ACL.py \
 --flickr_path $DATA/Flickr \
 --avs_path $DATA/AVSBench/AVS1 \
 --vggsound_path $DATA/vggsound \
+--avatar_path $DATA/AVATAR \
 --san_path $DATA/silence_and_noise/audio \
 --save_path $SAVE_PATH

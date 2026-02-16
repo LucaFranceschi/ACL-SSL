@@ -10,6 +10,7 @@ from datasets.VGGSS.VGGSS_Dataset import VGGSSDataset, ExtendVGGSSDataset
 from datasets.Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
 from datasets.AVSBench.AVSBench_Dataset import AVSBenchDataset
 from datasets.vggsound.VGGSound_Dataset import VGGSoundDataset
+from datasets.AVATAR.AVATAR_Dataset import AVATARDataset
 from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from importlib import import_module
@@ -79,6 +80,10 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
     avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
                                                     pin_memory=False, drop_last=True)
 
+    avatar_dataset = AVATARDataset(data_path_dict['avatar'], 'all', is_train=False, input_resolution=args.input_resolution)
+    avatar_dataloader = torch.utils.data.DataLoader(avatar_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
+                                                    pin_memory=False, drop_last=True, collate_fn=avatar_collate_fn)
+
     model_weights_names = os.listdir(os.path.join(save_path, 'Train_record', model_exp_name))
     epoch_list = sorted(int(m.group(1)) for s in model_weights_names if (m := re.match(r'Param_(\d+).pth', s)))
 
@@ -121,6 +126,8 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
             tensorboard_path, data_path_dict, USE_CUDA)
         eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
             tensorboard_path, data_path_dict, USE_CUDA)
+        eval_avatar_agg(module, avatar_dataloader, args, viz_dir_template.format('avatar'), epoch,
+              tensorboard_path, data_path_dict, USE_CUDA)
 
         if result_dict['best_AUC'][0] > best_scores['best_AUC']['AUC']:
             best_scores['best_AUC']['epoch'] = epoch
@@ -151,6 +158,7 @@ if __name__ == "__main__":
     parser.add_argument('--flickr_path', type=str, default='', help='Flickr dataset directory')
     parser.add_argument('--avs_path', type=str, default='', help='AVSBench dataset directory')
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
+    parser.add_argument('--avatar_path', type=str, default='', help='AVATAR dataset directory')
     parser.add_argument('--san_path', type=str, default='', help='Silence and noise data directory')
 
     args = parser.parse_args()
@@ -159,6 +167,7 @@ if __name__ == "__main__":
                  'flickr': args.flickr_path,
                  'avs': args.avs_path,
                  'vggsound': args.vggsound_path,
+                 'avatar': args.avatar_path,
                  'san': args.san_path,
                  'model_weights': args.model_weights}
 

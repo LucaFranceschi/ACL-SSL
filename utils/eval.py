@@ -22,11 +22,14 @@ import datasets.VGGSS.extend_eval_utils as exvggss_eval
 import datasets.Flickr.eval_utils as flickr_eval
 import datasets.Flickr.extend_eval_utils as exflickr_eval
 import datasets.AVSBench.eval_utils as avsbench_eval
+import datasets.AVATAR.eval_utils as avatar_eval
 from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
 
 from typing import List, Optional, Tuple, Dict
 from importlib import import_module
 from contextlib import nullcontext
+
+import torch.nn.functional as F
 
 import wandb
 import sys
@@ -1001,6 +1004,182 @@ def eval_exflickr_agg(
         msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+
+    print(msg)
+    with open(rst_path, 'w') as fp_rst:
+        fp_rst.write(msg)
+
+    if tensorboard_path is not None and epoch is not None:
+        writer.close()
+
+def avatar_collate_fn(batch):
+    """
+    Custom collate function to handle mixed tensor/list data.
+    """
+    # Initialize the output dictionary
+    batched_data = {}
+
+    # 1. Stack tensors (Images and Audios)
+    # We extract the list of images/audios from the batch and stack them
+    batched_data['images'] = torch.stack([item['images'] for item in batch])
+    batched_data['audios'] = torch.stack([item['audios'] for item in batch])
+
+    # 2. Keep metadata as lists (Ground Truths and IDs)
+    # We do NOT stack these; we just return a list of dictionaries/strings
+    batched_data['gts'] = [item['gts'] for item in batch]
+    batched_data['ids'] = [item['ids'] for item in batch]
+
+    return batched_data
+
+@torch.no_grad()
+def eval_avatar_agg(
+    model: torch.nn.Module,
+    test_dataloader: DataLoader,
+    args,
+    result_dir: str,
+    epoch: Optional[int] = None,
+    tensorboard_path: Optional[str] = None,
+    data_path_dict: dict = {},
+    use_cuda = False,
+    use_amp = False
+) -> None:
+    '''
+    Evaluate provided  model on AVATAR test dataset.
+
+    Args:
+        model (torch.nn.Module): Sound localization model to evaluate.
+        test_dataloader (DataLoader): DataLoader for the test dataset.
+        result_dir (str): Directory to save the evaluation results.
+        epoch (int, optional): The current epoch number (default: None).
+        tensorboard_path (str, optional): Path to store TensorBoard logs. If None, TensorBoard logs won't be written.
+
+    Returns:
+        None
+
+    Notes:
+        The evaluation includes threshold optimization for AVSBench.
+    '''
+    gt_resolution = (args.ground_truth_resolution, args.ground_truth_resolution)
+
+    def convert_ann_to_mask(ann: List, height: int, width: int):
+        mask = np.zeros((height, width), dtype=np.uint8)
+        poly = ann["segmentation"]
+
+        for p in poly:
+            p = np.array(p).reshape(-1, 2).astype(int)
+            cv2.fillPoly(mask, [p], 1)
+        return mask
+
+    if tensorboard_path is not None and epoch is not None:
+        os.makedirs(tensorboard_path, exist_ok=True)
+        writer = SummaryWriter(tensorboard_path)
+
+    test_split = test_dataloader.dataset.split
+
+    # Get placeholder text
+    prompt_template, text_pos_at_prompt, prompt_length = get_prompt_template()
+
+    real_san_audio_path = data_path_dict['san'] if args.san_real else None
+
+    neg_audios = get_silence_noise_audios(model,
+        test_dataloader.dataset[0]['audios'].shape,
+        True,
+        real_san_audio_path,
+        test_dataloader.dataset.SAMPLE_RATE,
+        test_dataloader.dataset.set_length,
+        use_cuda=use_cuda
+    )
+
+    san_dict = {'san': True, 'san_real': args.san_real, **neg_audios}
+
+    # Thresholds for evaluation
+    thrs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.30, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.70, 0.75, 0.8, 0.85, 0.9, 0.95]
+    evaluators = [avatar_eval.Evaluator() for i in range(len(thrs))]
+
+    for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate AVATAR dataset({test_split})...")):
+        images, audios, gts, name = data['images'], data['audios'], data['gts'], data['ids']
+
+        audio_embeddings = {}
+
+        # Inference
+        placeholder_tokens = model.get_placeholder_token(prompt_template.replace('{}', ''))
+        placeholder_tokens = placeholder_tokens.repeat((test_dataloader.batch_size, 1))
+        audio_driven_embedding = model.encode_audio(audios.to(model.device), placeholder_tokens, text_pos_at_prompt,
+                                                    prompt_length)
+
+        audio_embeddings['pred_emb'] = audio_driven_embedding
+
+        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+
+        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+
+        # Localization result
+        out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
+
+        # Evaluation for all thresholds
+        target = torch.zeros_like(out_dict['heatmap'])
+        labels = []
+        for b, gt in enumerate(gts):
+            mask = torch.zeros((gt['original_height'], gt['original_width']))
+            label = []
+            for ann in gt['annotations']:
+                mask += torch.tensor(convert_ann_to_mask(ann, gt['original_height'], gt['original_width']))
+                label.append(ann['audio_visual_category'])
+            mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0), size=gt_resolution, mode='bilinear', align_corners=False).squeeze()
+            target[b] = mask >= 1
+            labels.append(label)
+
+        for i, thr in enumerate(thrs):
+            evaluators[i].evaluate_batch(**out_dict, target=target.to(model.device), thr=thr)
+
+        # Visual results
+        for j in range(test_dataloader.batch_size):
+            seg = out_dict['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+
+            os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
+            cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
+
+        # Overall figure
+        for j in range(test_dataloader.batch_size):
+            original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.jpg')).resize(gt_resolution)
+            gt_image = ((1 - target[j].squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution)
+            seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution).point(
+                lambda p: 0 if p / 255 < 0.5 else 255)
+
+            draw_overall(result_dir, original_image, gt_image, heatmap_image, seg_image, labels[j], name[j])
+            draw_overlaid(result_dir, original_image, heatmap_image, name[j])
+
+    # Save result
+    os.makedirs(result_dir, exist_ok=True)
+    rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
+    msg = ''
+
+    # Final result
+    for i, thr in enumerate(thrs):
+        std_metrics, silence_metrics, noise_metrics = evaluators[i].finalize()
+
+        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
+        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
+        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+
+        if tensorboard_path is not None and epoch is not None:
+            writer.add_scalars(f'test/std/avs/{test_split}({thr})', std_metrics, epoch)
+
+        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+        msg += f'{silence_metrics["mIoU"]=}, {silence_metrics["Fmeasure"]=}\n'
+        msg += f'{silence_metrics["cIoU_ap50"]=}, {silence_metrics["AUC"]=}, {silence_metrics["cIoU_hat"]=}\n'
+        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+        if tensorboard_path is not None and epoch is not None:
+            writer.add_scalars(f'test/silence/avs/{test_split}({thr})', silence_metrics, epoch)
+
+        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+        msg += f'{noise_metrics["mIoU"]=}, {noise_metrics["Fmeasure"]=}\n'
+        msg += f'{noise_metrics["cIoU_ap50"]=}, {noise_metrics["AUC"]=}, {noise_metrics["cIoU_hat"]=}\n'
+        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+        if tensorboard_path is not None and epoch is not None:
+            writer.add_scalars(f'test/noise/avs/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
