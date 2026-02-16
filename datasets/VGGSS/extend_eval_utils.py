@@ -237,7 +237,7 @@ class Evaluator(object):
 
     def _evaluate_batch(self, heatmap: torch.Tensor, metric, gt: torch.Tensor, label, conf, name, thr = None):
         for i in range(heatmap.shape[0]):
-            pred = heatmap[i].detach().cpu().numpy()
+            pred = heatmap[i].detach().cpu()
             if thr is None:
                 thr = np.sort(pred.flatten())[int(pred.shape[0] * pred.shape[1] * 0.5)]
 
@@ -246,7 +246,7 @@ class Evaluator(object):
             self.update(bb, gt[i], conf[i], pred, thr, name[i], metric)
 
             if metric in ('sil', 'noise'):
-                self.cal_pIA(heatmap, metric, thr)
+                self.cal_pIA(pred, metric, thr)
 
     def cal_pIA(self, infer: torch.Tensor, metric: str, thres: float = 0.01):
         '''
