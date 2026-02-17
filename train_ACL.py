@@ -56,7 +56,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
         world_size = dist.get_world_size()
         print(f'World size: {world_size}') if rank == 0 else None
 
-    device = torch.cuda.current_device() if USE_CUDA else torch.device('cpu')
+    device = torch.device('cuda', torch.cuda.current_device()) if USE_CUDA else torch.device('cpu')
     print(f'Device: {device} is used\n')
 
     model_exp_name = f'{model_name}_{exp_name}' if exp_name != "" else model_name

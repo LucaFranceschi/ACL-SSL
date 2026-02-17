@@ -1063,11 +1063,12 @@ def eval_avatar_agg(
 
     def convert_ann_to_mask(ann: List, height: int, width: int):
         mask = np.zeros((height, width), dtype=np.uint8)
-        poly = ann["segmentation"]
+        if 'segmentation' in ann:
+            poly = ann["segmentation"]
 
-        for p in poly:
-            p = np.array(p).reshape(-1, 2).astype(int)
-            cv2.fillPoly(mask, [p], 1)
+            for p in poly:
+                p = np.array(p).reshape(-1, 2).astype(int)
+                cv2.fillPoly(mask, [p], 1)
         return mask
 
     if tensorboard_path is not None and epoch is not None:
@@ -1134,19 +1135,18 @@ def eval_avatar_agg(
 
         # Visual results
         for j in range(test_dataloader.batch_size):
-            seg = out_dict['heatmap'][j:j+1]
-            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap = out_dict['heatmap'][j:j+1]
+            heatmap_np = ((1 - heatmap.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            heatmap_image = Image.fromarray(heatmap_np)
 
-            os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
-            cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
+            os.makedirs(f'{result_dir}/heatmap/{name[j].split("/")[0]}', exist_ok=True)
+            os.makedirs(f'{result_dir}/overall/{name[j].split("/")[0]}', exist_ok=True)
+            os.makedirs(f'{result_dir}/overlaid/{name[j].split("/")[0]}', exist_ok=True)
+            heatmap_image.save(f'{result_dir}/heatmap/{name[j]}.jpg')
 
-        # Overall figure
-        for j in range(test_dataloader.batch_size):
             original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.jpg')).resize(gt_resolution)
-            gt_image = ((1 - target[j].squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
-            heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution)
-            seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution).point(
-                lambda p: 0 if p / 255 < 0.5 else 255)
+            gt_image = Image.fromarray(((1 - target[j].squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)).resize(gt_resolution)
+            seg_image = heatmap_image.resize(gt_resolution).point(lambda p: 0 if p / 255 < 0.5 else 255)
 
             draw_overall(result_dir, original_image, gt_image, heatmap_image, seg_image, labels[j], name[j])
             draw_overlaid(result_dir, original_image, heatmap_image, name[j])

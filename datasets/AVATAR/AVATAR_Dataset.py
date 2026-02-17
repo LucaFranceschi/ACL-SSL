@@ -41,6 +41,7 @@ class AVATARDataset(Dataset):
             for filename in os.listdir(os.path.join(self.metadata_dir, dirname)):
                 if filename.endswith('.json'):
                     metadata_files.append(os.path.join(dirname, filename.split('.json')[0]))
+                    break # only get one from each directory
         metadata_files = set(metadata_files)
 
         ''' Audio files '''
@@ -194,8 +195,4 @@ class AVATARDataset(Dataset):
 
         out = {'images': image, 'audios': audio, 'gts': annotations, 'ids': file_id}
         out = {key: value for key, value in out.items() if value is not None}
-        print(f'{out["images"].shape=}')
-        print(f'{out["audios"].shape=}')
-        print(f'{out["gts"]=}')
-        print(f'{out["ids"]=}')
         return out
