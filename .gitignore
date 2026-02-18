@@ -20,6 +20,7 @@ s4_data
 ms3_data
 
 vggsound*.csv
+classes.csv
 
 old_outputs/
 
@@ -35,7 +36,7 @@ __pycache__
 
 train_outputs
 
-val_audios
+val_audios*
 
 wandb
 
