@@ -107,9 +107,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_val{subset}', is_train=False,
                                     input_resolution=args.input_resolution, set_length=3)
 
-    test_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_test{subset}', is_train=False,
-                                    input_resolution=args.ground_truth_resolution, set_length=3)
-
     ''' Create DistributedSampler '''
     sampler = DistributedSampler(train_dataset, num_replicas=world_size, rank=rank, shuffle=True) if USE_DDP else None
 
@@ -122,55 +119,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     validation_dataloader = torch.utils.data.DataLoader(validation_dataset, batch_size=args.batch_size, sampler=sampler_validation,
                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
                                                    worker_init_fn=seed_worker, shuffle=False)
-
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                                    num_workers=args.num_workers, pin_memory=False, drop_last=True,
-                                                    worker_init_fn=seed_worker, shuffle=False)
-
-    if args.train_data == 'vggss_heard':
-        # Get Test Dataloader (VGGSS)
-        heard_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_heard_test', is_train=False,
-                                     input_resolution=args.input_resolution)
-        heard_dataloader = torch.utils.data.DataLoader(heard_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                       pin_memory=False, drop_last=False)
-        # Get Test Dataloader (VGGSS)
-        unheard_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_unheard_test', is_train=False,
-                                       input_resolution=args.input_resolution)
-        unheard_dataloader = torch.utils.data.DataLoader(unheard_dataset, batch_size=1, shuffle=False, num_workers=1,
-                                                         pin_memory=False, drop_last=False)
-
-    # Get Test Dataloader (VGGSS)
-    vggss_dataset = VGGSSDataset(data_path_dict['vggss'], 'vggss_test', is_train=False,
-                                 input_resolution=args.input_resolution)
-    vggss_dataloader = torch.utils.data.DataLoader(vggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=True)
-
-    # Get Test Dataloader (Flickr)
-    flickr_dataset = FlickrDataset(data_path_dict['flickr'], 'flickr_test', is_train=False,
-                                   input_resolution=args.input_resolution)
-    flickr_dataloader = torch.utils.data.DataLoader(flickr_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                    pin_memory=False, drop_last=True)
-
-    # Get Test Dataloader (Extended VGGSS)
-    exvggss_dataset = ExtendVGGSSDataset(data_path_dict['vggss'], input_resolution=args.input_resolution)
-    exvggss_dataloader = torch.utils.data.DataLoader(exvggss_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                     pin_memory=False, drop_last=True)
-
-    # Get Test Dataloader (Extended Flickr)
-    exflickr_dataset = ExtendFlickrDataset(data_path_dict['flickr'], input_resolution=args.input_resolution)
-    exflickr_dataloader = torch.utils.data.DataLoader(exflickr_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                      pin_memory=False, drop_last=True)
-
-    # Get Test Dataloader (AVS)
-    avss4_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_s4_test', is_train=False,
-                                    input_resolution=args.input_resolution)
-    avss4_dataloader = torch.utils.data.DataLoader(avss4_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                   pin_memory=False, drop_last=True)
-
-    avsms3_dataset = AVSBenchDataset(data_path_dict['avs'], 'avs1_ms3_test', is_train=False,
-                                     input_resolution=args.input_resolution)
-    avsms3_dataloader = torch.utils.data.DataLoader(avsms3_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
-                                                    pin_memory=False, drop_last=True)
 
     ''' Optimizer '''
     module_path, module_name = args.optim.pop('module_path'), args.optim.pop('module_name')
@@ -360,27 +308,6 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
             torch.cuda.empty_cache()
 
         gc.collect()
-
-    # ''' Evaluate '''
-    # with torch.no_grad():
-
-    #     if rank == 0:
-    #         eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-    #         eval_exflickr_agg(module, exflickr_dataloader, args, viz_dir_template.format('exflickr'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-    #         eval_avsbench_agg(module, avsms3_dataloader, args, viz_dir_template.format('ms3'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-    #         eval_vggss_agg(module, vggss_dataloader, args, viz_dir_template.format('vggss'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-    #         eval_vggsound_agg(module, test_dataloader, args, viz_dir_template.format('vggsound_test'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-    #         eval_exvggss_agg(module, exvggss_dataloader, args, viz_dir_template.format('exvggss'), epoch,
-    #             tensorboard_path, data_path_dict, USE_CUDA, config['amp'])
-
-    #     if rank == 1 or not USE_DDP:
-    #         eval_avsbench_agg(module, avss4_dataloader, args, viz_dir_template.format('s4'), epoch,
-    #                         tensorboard_path=tensorboard_path)
 
     writer.close()
 
