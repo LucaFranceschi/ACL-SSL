@@ -41,7 +41,8 @@ class AVATARDataset(Dataset):
             for filename in os.listdir(os.path.join(self.metadata_dir, dirname)):
                 if filename.endswith('.json'):
                     metadata_files.append(os.path.join(dirname, filename.split('.json')[0]))
-                    break # only get one from each directory
+                    if self.split == 'one':
+                        break # only get one from each directory
         metadata_files = set(metadata_files)
 
         ''' Audio files '''
