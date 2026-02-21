@@ -77,7 +77,7 @@ class Evaluator(object):
         """
         for metrics in [self.silence_metrics, self.noise_metrics]:
             if len(metrics['pIA']) > 0:
-                aucs = [np.sum(np.array(metrics['pIA']) >= 0.05 * i) / len(metrics['pIA']) for i in range(21)]
+                aucs = [np.sum(np.array(metrics['pIA']) < 0.05 * i) / len(metrics['pIA']) for i in range(21)]
                 thr = [0.05 * i for i in range(21)]
                 auc = mt.auc(thr, aucs)
                 metrics['metrics']['AUC_N'] = auc
@@ -91,7 +91,7 @@ class Evaluator(object):
         """
         for metrics in [self.silence_metrics, self.noise_metrics]:
             if len(metrics['pIA']) > 0:
-                ap50 = np.mean(np.array(metrics['pIA']) <= 0.5)
+                ap50 = np.mean(np.array(metrics['pIA']) < 0.5)
                 metrics['metrics']['pIA_ap50'] = ap50
 
     def finalize_pIA(self):

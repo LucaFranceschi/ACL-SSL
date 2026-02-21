@@ -28,16 +28,8 @@ class Evaluator(object):
         }
 
         self.silence_metrics = {
-            'mIoU': [],
-            'F_values': [],
-            'cIoU': [],
             'pIA': [],
             'metrics': {
-                'mIoU': None,
-                'Fmeasure': None,
-                'AUC': None,
-                'cIoU_ap50': None,
-                'cIoU_hat': None,
                 'AUC_N': None,
                 'pIA_ap50': None,
                 'pIA_hat': None
@@ -78,13 +70,15 @@ class Evaluator(object):
             else:
                 thrs.append(thr)
 
-            self.cal_CIOU(infer, target[j], metric, thr) # cIoU always computed
             if metric in ('sil', 'noise'):
                 self.cal_pIA(infer, metric, thr)
+            else:
+                self.cal_CIOU(infer, target[j], metric, thr)
 
-        infers, gts = heatmap.squeeze(1), target.squeeze(1)
-        self.mask_iou(infers, gts, metric, thrs)
-        self.Eval_Fmeasure(infers, gts, metric)
+        if metric == 'std':
+            infers, gts = heatmap.squeeze(1), target.squeeze(1)
+            self.mask_iou(infers, gts, metric, thrs)
+            self.Eval_Fmeasure(infers, gts, metric)
 
     def cal_CIOU(self, infer: torch.Tensor, gtmap: torch.Tensor, metric, thres: float = 0.01):
         """
@@ -103,11 +97,7 @@ class Evaluator(object):
         ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1) + 1e-12)
         ciou = ciou.detach().cpu().float()
 
-        if metric == 'sil':
-            self.silence_metrics['cIoU'].append(ciou)
-        elif metric == 'noise':
-            self.noise_metrics['cIoU'].append(ciou)
-        elif metric == 'std':
+        if metric == 'std':
             self.std_metrics['cIoU'].append(ciou)
         return
 
@@ -129,8 +119,6 @@ class Evaluator(object):
             self.silence_metrics['pIA'].append(pIA)
         elif metric == 'noise':
             self.noise_metrics['pIA'].append(pIA)
-        elif metric == 'std':
-            self.std_metrics['pIA'].append(pIA)
         return
 
     def mask_iou(self, preds: torch.Tensor, targets: torch.Tensor, metric, thrs: List[float], eps: float = 1e-7) -> float:
@@ -168,11 +156,7 @@ class Evaluator(object):
             miou += (torch.sum(inter / (union + eps))).squeeze()
         miou = miou / N
 
-        if metric == 'sil':
-            self.silence_metrics['mIoU'].append(miou.detach().cpu())
-        elif metric == 'noise':
-            self.noise_metrics['mIoU'].append(miou.detach().cpu())
-        elif metric == 'std':
+        if metric == 'std':
             self.std_metrics['mIoU'].append(miou.detach().cpu())
 
         return miou
@@ -237,11 +221,7 @@ class Evaluator(object):
             img_num += 1
             score = avg_f / img_num
 
-            if metric == 'sil':
-                self.silence_metrics['F_values'].append(f_score.detach().cpu().numpy())
-            elif metric == 'noise':
-                self.noise_metrics['F_values'].append(f_score.detach().cpu().numpy())
-            elif metric == 'std':
+            if metric == 'std':
                 self.std_metrics['F_values'].append(f_score.detach().cpu().numpy())
 
         return score.max().item()
@@ -253,7 +233,7 @@ class Evaluator(object):
         Returns:
             float: Final mIoU value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['mIoU']) > 0:
                 miou = np.sum(np.array(metric['mIoU'])) / self.N
                 metric['metrics']['mIoU'] = miou
@@ -269,7 +249,7 @@ class Evaluator(object):
             Fix bug in official test code (Issue: Results vary depending on the batch number)
             The official code had an issue because it optimized precision-recall thresholds for each mini-batch
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['F_values']) > 0:
                 F = np.max(np.mean(metric['F_values'], axis=0))
                 metric['metrics']['Fmeasure'] = F
@@ -281,7 +261,7 @@ class Evaluator(object):
         Returns:
             float: AUC value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
                 cious = [np.sum(np.array(metric['cIoU']) >= 0.05 * i) / len(metric['cIoU'])
                         for i in range(21)]
@@ -291,7 +271,7 @@ class Evaluator(object):
 
         for metric in [self.silence_metrics, self.noise_metrics]:
             if len(metric['pIA']) > 0:
-                aucs = [np.sum(np.array(metric['pIA']) >= 0.05 * i) / len(metric['pIA']) for i in range(21)]
+                aucs = [np.sum(np.array(metric['pIA']) < 0.05 * i) / len(metric['pIA']) for i in range(21)]
                 thr = [0.05 * i for i in range(21)]
                 auc = mt.auc(thr, aucs)
                 metric['metrics']['AUC_N'] = auc
@@ -303,14 +283,14 @@ class Evaluator(object):
         Returns:
             float: cIoU@0.5 value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
-                ap50 = np.mean(np.array(metric['cIoU']) <= 0.5)
+                ap50 = np.mean(np.array(metric['cIoU']) >= 0.5)
                 metric['metrics']['cIoU_ap50'] = ap50
 
         for metric in [self.silence_metrics, self.noise_metrics]:
             if len(metric['pIA']) > 0:
-                ap50 = np.mean(np.array(metric['pIA']) <= 0.5)
+                ap50 = np.mean(np.array(metric['pIA']) < 0.5)
                 metric['metrics']['pIA_ap50'] = ap50
 
     def finalize_means(self):
@@ -320,7 +300,7 @@ class Evaluator(object):
         Returns:
             float: Mean cIoU value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
                 ciou = np.mean(np.array(metric['cIoU']))
                 metric['metrics']['cIoU_hat'] = ciou

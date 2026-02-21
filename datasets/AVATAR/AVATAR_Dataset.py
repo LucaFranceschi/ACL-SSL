@@ -62,17 +62,27 @@ class AVATARDataset(Dataset):
 
         ''' Ground truth '''
         self.ground_truths = {}
-        self.labels_dict = {}
         for file in metadata_files:
             gt = json.load(open(os.path.join(self.metadata_dir, file + '.json')))
             self.ground_truths[file] = {k: gt[k] for k in ('original_width', 'original_height', 'annotations')}
+
+        off_screen_files = []
+        for key, val in self.ground_truths.items():
+            if val['annotations'][0]['task'] == "Off-Screen":
+                off_screen_files.append(key)
+
+        for file in off_screen_files:
+            del self.ground_truths[file]
 
         ''' Available files'''
         subset = []
         for file in metadata_files:
             if file.split('/')[0] in audio_files:
                 subset.append(file)
+
         self.file_list = set(subset).intersection(image_files)
+        self.file_list = self.file_list - set(off_screen_files)
+        print(len(self.file_list), len(set(off_screen_files)))
         self.file_list = sorted(self.file_list)
         # print(f'Intersection of {len(audio_files)}a, {len(image_files)}i and {len(subset)}l is {len(self.file_list)}')
 

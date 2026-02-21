@@ -4,6 +4,7 @@ from sklearn import metrics as mt
 from typing import List, Optional, Tuple, Dict
 import copy
 
+
 class Evaluator(object):
     def __init__(self) -> None:
         """
@@ -26,11 +27,7 @@ class Evaluator(object):
         }
         self.silence_metrics = {
             'pIA': [],
-            'cIoU': [],
             'metrics': {
-                'AUC': None,
-                'cIoU_ap50': None,
-                'cIoU_hat': None,
                 'AUC_N': None,
                 'pIA_ap50': None,
                 'pIA_hat': None
@@ -67,9 +64,10 @@ class Evaluator(object):
             if thr is None:
                 thr = np.sort(infer.detach().cpu().numpy().flatten())[int(infer.shape[1] * infer.shape[2] / 2)]
 
-            self.cal_CIOU(infer, target[j], metric, thr) # cIoU always computed
             if metric in ('sil', 'noise'):
                 self.cal_pIA(infer, metric, thr)
+            else:
+                self.cal_CIOU(infer, target[j], metric, thr)
 
     def cal_CIOU(self, infer: torch.Tensor, gtmap: torch.Tensor, metric, thres: float = 0.01):
         """
@@ -88,11 +86,7 @@ class Evaluator(object):
         ciou = (infer_map * gtmap).sum(2).sum(1) / (gtmap.sum(2).sum(1) + (infer_map * (gtmap == 0)).sum(2).sum(1) + 1e-12)
         ciou = ciou.detach().cpu().float()
 
-        if metric == 'sil':
-            self.silence_metrics['cIoU'].append(ciou)
-        elif metric == 'noise':
-            self.noise_metrics['cIoU'].append(ciou)
-        elif metric == 'std':
+        if metric == 'std':
             self.std_metrics['cIoU'].append(ciou)
         return
 
@@ -114,8 +108,6 @@ class Evaluator(object):
             self.silence_metrics['pIA'].append(pIA)
         elif metric == 'noise':
             self.noise_metrics['pIA'].append(pIA)
-        elif metric == 'std':
-            self.std_metrics['pIA'].append(pIA)
         return
 
     def finalize_AUC(self):
@@ -125,7 +117,7 @@ class Evaluator(object):
         Returns:
             float: AUC value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
                 cious = [np.sum(np.array(metric['cIoU']) >= 0.05 * i) / len(metric['cIoU'])
                         for i in range(21)]
@@ -135,7 +127,7 @@ class Evaluator(object):
 
         for metric in [self.silence_metrics, self.noise_metrics]:
             if len(metric['pIA']) > 0:
-                aucs = [np.sum(np.array(metric['pIA']) >= 0.05 * i) / len(metric['pIA']) for i in range(21)]
+                aucs = [np.sum(np.array(metric['pIA']) < 0.05 * i) / len(metric['pIA']) for i in range(21)]
                 thr = [0.05 * i for i in range(21)]
                 auc = mt.auc(thr, aucs)
                 metric['metrics']['AUC_N'] = auc
@@ -147,14 +139,14 @@ class Evaluator(object):
         Returns:
             float: cIoU@0.5 value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
-                ap50 = np.mean(np.array(metric['cIoU']) <= 0.5)
+                ap50 = np.mean(np.array(metric['cIoU']) >= 0.5)
                 metric['metrics']['cIoU_ap50'] = ap50
 
         for metric in [self.silence_metrics, self.noise_metrics]:
             if len(metric['pIA']) > 0:
-                ap50 = np.mean(np.array(metric['pIA']) <= 0.5)
+                ap50 = np.mean(np.array(metric['pIA']) < 0.5)
                 metric['metrics']['pIA_ap50'] = ap50
 
     def finalize_means(self):
@@ -164,7 +156,7 @@ class Evaluator(object):
         Returns:
             float: Mean cIoU value.
         """
-        for metric in [self.std_metrics, self.silence_metrics, self.noise_metrics]:
+        for metric in [self.std_metrics]:
             if len(metric['cIoU']) > 0:
                 ciou = np.mean(np.array(metric['cIoU']))
                 metric['metrics']['cIoU_hat'] = ciou
