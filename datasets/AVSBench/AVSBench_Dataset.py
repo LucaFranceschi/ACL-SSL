@@ -7,10 +7,11 @@ import os
 import csv
 from typing import Dict, Optional, Union, List
 
+from utils.util import AddRandomNoise
 
 class AVSBenchDataset(Dataset):
     def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 10,
-                 input_resolution: int = 224) -> None:
+                 input_resolution: int = 224, eval_snr = None) -> None:
         """
         Initialize AVSBench Dataset.
 
@@ -65,6 +66,10 @@ class AVSBenchDataset(Dataset):
                 vt.ToTensor(),
                 vt.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),  # CLIP
             ])
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
 
     def __len__(self):
         """
@@ -153,7 +158,7 @@ class AVSBenchDataset(Dataset):
         gts = self.get_gt(item)
 
         ''' Transform '''
-        audio = audio_file
+        audio = audio_file if self.eval_noise_tr == None else self.eval_noise_tr(audio_file)
         image = self.image_transform(image_file)
 
         out = {'images': image, 'audios': audio, 'gts': gts, 'labels': label, 'ids': file_id}

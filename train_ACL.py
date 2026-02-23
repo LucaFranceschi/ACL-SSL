@@ -102,7 +102,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     # Get Train Dataloader (VGGSS)
     subset = ''
     train_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_train{subset}', is_train=True,
-                                    input_resolution=args.input_resolution, noise_transform=args.san_added_noise_tr, set_length=3)
+                                    input_resolution=args.input_resolution, noise_transform_train=args.san_added_noise_tr, set_length=3)
 
     validation_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_val{subset}', is_train=False,
                                     input_resolution=args.input_resolution, set_length=3)

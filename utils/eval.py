@@ -219,7 +219,8 @@ def eval_vggsound_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> Dict[str, float]:
     '''
     Evaluate provided model on VGGS (VGG-Sound) test dataset.
@@ -265,6 +266,11 @@ def eval_vggsound_agg(
     # Thresholds for evaluation
     thrs = [0.05, 0.1, 0.15, 0.2, 0.25, 0.30, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.70, 0.75, 0.8, 0.85, 0.9, 0.95]
     evaluators = [vggsound_eval.Evaluator() for i in range(len(thrs))]
+
+    if snr != None:
+        # Special case: a snr is passed, therefore silence and noise are not computed.
+        # VGGSound does not have original (std) evaluation, so there is nothing to do here
+        return {}
 
     for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate VGGS({test_split}) dataset...")):
         images, audios = data['images'], data['audios']
@@ -367,7 +373,8 @@ def eval_vggss_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> Dict[str, float]:
     '''
     Evaluate provided model on VGG-SS (VGG Sound Source) test dataset.
@@ -427,9 +434,10 @@ def eval_vggss_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -476,21 +484,22 @@ def eval_vggss_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
 
         best_AUC = [std_metrics['AUC'], thr] if best_AUC[0] < std_metrics['AUC'] else best_AUC
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
-            best_AUC_silence = [silence_metrics['AUC_N'], thr] if best_AUC_silence[0] < silence_metrics['AUC_N'] else best_AUC_silence
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
+                best_AUC_silence = [silence_metrics['AUC_N'], thr] if best_AUC_silence[0] < silence_metrics['AUC_N'] else best_AUC_silence
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
-            best_AUC_noise = [noise_metrics['AUC_N'], thr] if best_AUC_noise[0] < noise_metrics['AUC_N'] else best_AUC_noise
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+                best_AUC_noise = [noise_metrics['AUC_N'], thr] if best_AUC_noise[0] < noise_metrics['AUC_N'] else best_AUC_noise
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
@@ -514,7 +523,8 @@ def eval_avsbench_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -573,9 +583,10 @@ def eval_avsbench_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -620,17 +631,18 @@ def eval_avsbench_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/avs/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avs/{test_split}({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/avs/{test_split}({thr})', silence_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/avs/{test_split}({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/avs/{test_split}({thr})', noise_metrics, epoch)
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/avs/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
@@ -650,7 +662,8 @@ def eval_flickr_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -710,9 +723,10 @@ def eval_flickr_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -755,17 +769,18 @@ def eval_flickr_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
@@ -785,7 +800,8 @@ def eval_exvggss_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -843,9 +859,10 @@ def eval_exvggss_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -874,17 +891,19 @@ def eval_exvggss_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
+
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
@@ -904,7 +923,8 @@ def eval_exflickr_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> None:
     '''
     Evaluate provided  model on AVSBench (S4, MS3) test dataset.
@@ -962,9 +982,10 @@ def eval_exflickr_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -993,17 +1014,18 @@ def eval_exflickr_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/{test_split}({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
+            msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/{test_split}({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:
@@ -1041,7 +1063,8 @@ def eval_avatar_agg(
     tensorboard_path: Optional[str] = None,
     data_path_dict: dict = {},
     use_cuda = False,
-    use_amp = False
+    use_amp = False,
+    snr = None
 ) -> None:
     '''
     Evaluate provided  model on AVATAR test dataset.
@@ -1130,9 +1153,10 @@ def eval_avatar_agg(
 
         audio_embeddings['pred_emb'] = audio_driven_embedding
 
-        audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
+        if snr != None:
+            audio_embeddings['pred_emb_silence'] = san_dict['pred_emb_san'][0].unsqueeze(0)
 
-        audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
+            audio_embeddings['pred_emb_noise'] = san_dict['pred_emb_san'][1].unsqueeze(0)
 
         # Localization result
         out_dict = model(images.to(model.device), resolution=args.ground_truth_resolution, **audio_embeddings)
@@ -1194,17 +1218,18 @@ def eval_avatar_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/avatar/{test_split}_seg({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avatar/{test_split}_seg({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/avatar/{test_split}_seg({thr})', silence_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/avatar/{test_split}_seg({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/avatar/{test_split}_seg({thr})', noise_metrics, epoch)
+            msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/avatar/{test_split}_seg({thr})', noise_metrics, epoch)
 
         std_metrics, silence_metrics, noise_metrics = evaluators_bb[i].finalize()
 
@@ -1213,17 +1238,18 @@ def eval_avatar_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std/avatar/{test_split}_bb({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avatar/{test_split}_bb({thr})', std_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr} evaluated with Silence)\n'
-        msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/silence/avatar/{test_split}_bb({thr})', silence_metrics, epoch)
+        if snr != None:
+            msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr} evaluated with Silence)\n'
+            msg += f'{silence_metrics["pIA_ap50"]=}, {silence_metrics["AUC_N"]=}, {silence_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/silence/avatar/{test_split}_bb({thr})', silence_metrics, epoch)
 
-        msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr} evaluated with Noise)\n'
-        msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
-        if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/noise/avatar/{test_split}_bb({thr})', noise_metrics, epoch)
+            msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr} evaluated with Noise)\n'
+            msg += f'{noise_metrics["pIA_ap50"]=}, {noise_metrics["AUC_N"]=}, {noise_metrics["pIA_hat"]=}\n'
+            if tensorboard_path is not None and epoch is not None:
+                writer.add_scalars(f'test/noise/avatar/{test_split}_bb({thr})', noise_metrics, epoch)
 
     print(msg)
     with open(rst_path, 'w') as fp_rst:

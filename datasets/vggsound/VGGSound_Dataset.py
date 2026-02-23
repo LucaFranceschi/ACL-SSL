@@ -14,7 +14,8 @@ from utils.util import AddRandomNoise, RandomApply
 
 class VGGSoundDataset(Dataset):
     def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 8,
-                 input_resolution: int = 224, hard_aug: bool = False, noise_transform: bool = False):
+                 input_resolution: int = 224, hard_aug: bool = False, noise_transform_train: bool = False,
+                 eval_snr = None):
         """
         Initialize VGG-Sound Dataset.
 
@@ -55,7 +56,7 @@ class VGGSoundDataset(Dataset):
         ''' Transform '''
         if is_train:
             # since at.AddNoise is not a thing in torchaudio 0.13.0
-            if noise_transform:
+            if noise_transform_train:
                 self.audio_transform = RandomApply([
                     AddRandomNoise()
                 ], 0.5)
@@ -91,6 +92,10 @@ class VGGSoundDataset(Dataset):
         self.use_image = True
         if input_resolution is None:
             self.use_image = False
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
 
     def __len__(self):
         """
@@ -166,9 +171,12 @@ class VGGSoundDataset(Dataset):
         label = self.label_dict[self.file_list[item]].replace('_', ' ')
 
         ''' Transform '''
-        audio = self.audio_transform(audio_file) if self.set_length != 0 else None
+        if self.eval_noise_tr == None:
+            audio = self.audio_transform(audio_file) if self.set_length != 0 else None
+            noisy_audios = self.audio_transform(audio_file, force=True) if self.set_length != 0 else None
+        else:
+            audio = self.eval_noise_tr(audio_file) if self.set_length != 0 else None
         image = self.image_transform(image_file) if self.use_image else None
-        noisy_audios = self.audio_transform(audio_file, force=True) if self.set_length != 0 else None
 
         out = {'images': image, 'audios': audio, 'noisy_audios': noisy_audios, 'labels': label, 'ids': file_id}
         out = {key: value for key, value in out.items() if value is not None}

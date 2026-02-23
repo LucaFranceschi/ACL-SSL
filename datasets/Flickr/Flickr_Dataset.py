@@ -10,6 +10,7 @@ import csv
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Union
 
+from utils.util import AddRandomNoise
 
 def load_all_bboxes(annotation_dir: str) -> Dict[str, List[np.ndarray]]:
     """
@@ -64,7 +65,7 @@ def bbox2gtmap(bboxes: List[List[int]]) -> np.ndarray:
 
 class FlickrDataset(Dataset):
     def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 10,
-                 input_resolution: int = 224):
+                 input_resolution: int = 224, eval_snr = None):
         """
         Initialize Flickr SoundNet Dataset.
 
@@ -126,6 +127,11 @@ class FlickrDataset(Dataset):
                 vt.ToTensor(),
                 vt.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),  # CLIP
             ])
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
+
 
     def __len__(self):
         """
@@ -211,7 +217,7 @@ class FlickrDataset(Dataset):
         bboxes = self.get_bbox(item)
 
         ''' Transform '''
-        audio = audio_file
+        audio = audio_file if self.eval_noise_tr == None else self.eval_noise_tr(audio_file)
         image = self.image_transform(image_file)
 
         out = {'images': image, 'audios': audio, 'bboxes': bboxes, 'labels': label, 'ids': file_id}
@@ -220,7 +226,7 @@ class FlickrDataset(Dataset):
 
 
 class ExtendFlickrDataset(Dataset):
-    def __init__(self, data_path: str, set_length: int = 10, input_resolution: int = 224):
+    def __init__(self, data_path: str, set_length: int = 10, input_resolution: int = 224, eval_snr = None):
         """
         Initialize Extended Flickr Dataset.
 
@@ -275,6 +281,10 @@ class ExtendFlickrDataset(Dataset):
             vt.ToTensor(),
             vt.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),  # CLIP
         ])
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
 
     def __len__(self):
         """
@@ -360,7 +370,7 @@ class ExtendFlickrDataset(Dataset):
         file_id = self.image_files[item].split('.')[0] + '_' + self.audio_files[item].split('.')[0]
 
         ''' Transform '''
-        audio = audio_file
+        audio = audio_file if self.eval_noise_tr == None else self.eval_noise_tr(audio_file)
         image = self.image_transform(image_file)
 
         out = {'images': image, 'audios': audio, 'bboxes': bboxes, 'labels': label, 'ids': file_id}

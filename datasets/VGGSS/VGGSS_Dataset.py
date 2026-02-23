@@ -10,6 +10,7 @@ import csv
 import json
 from typing import Dict, List, Optional, Union
 
+from utils.util import AddRandomNoise
 
 def load_all_bboxes(annotation_dir: str) -> Dict[str, List[np.ndarray]]:
     """
@@ -53,7 +54,7 @@ def bbox2gtmap(bboxes: List[List[int]]) -> np.ndarray:
 
 class VGGSSDataset(Dataset):
     def __init__(self, data_path: str, split: str, is_train: bool = True, set_length: int = 10,
-                 input_resolution: int = 224, hard_aug: bool = False):
+                 input_resolution: int = 224, hard_aug: bool = False, eval_snr = None):
         """
         Initialize VGG-Sound Dataset for VGG-SS.
 
@@ -125,6 +126,10 @@ class VGGSSDataset(Dataset):
         self.use_image = True
         if input_resolution is None:
             self.use_image = False
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
 
     def __len__(self):
         """
@@ -214,7 +219,10 @@ class VGGSSDataset(Dataset):
         bboxes = self.get_bbox(item) if self.set_length != 0 and self.use_image else None
 
         ''' Transform '''
-        audio = audio_file if self.set_length != 0 else None
+        if self.eval_noise_tr == None:
+            audio = audio_file if self.set_length != 0 else None
+        else:
+            audio = self.eval_noise_tr(audio_file) if self.set_length != 0 else None
         image = self.image_transform(image_file) if self.use_image else None
 
         out = {'images': image, 'audios': audio, 'bboxes': bboxes, 'labels': label, 'ids': file_id}
@@ -223,7 +231,7 @@ class VGGSSDataset(Dataset):
 
 
 class ExtendVGGSSDataset(Dataset):
-    def __init__(self, data_path: str, set_length: int = 10, input_resolution: int = 224):
+    def __init__(self, data_path: str, set_length: int = 10, input_resolution: int = 224, eval_snr = None):
         """
         Initialize Extended VGG-SS dataset.
 
@@ -277,6 +285,10 @@ class ExtendVGGSSDataset(Dataset):
             vt.ToTensor(),
             vt.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),  # CLIP
         ])
+
+        self.eval_noise_tr = None
+        if eval_snr != None:
+            self.eval_noise_tr = AddRandomNoise(snr=eval_snr)
 
     def __len__(self):
         """
@@ -361,7 +373,7 @@ class ExtendVGGSSDataset(Dataset):
         file_id = self.image_files[item].split('.')[0] + '_' + self.audio_files[item].split('.')[0]
 
         ''' Transform '''
-        audio = audio_file
+        audio = audio_file if self.eval_noise_tr == None else self.eval_noise_tr(audio_file)
         image = self.image_transform(image_file)
 
         out = {'images': image, 'audios': audio, 'bboxes': bboxes, 'labels': label, 'ids': file_id}

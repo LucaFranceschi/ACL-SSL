@@ -158,7 +158,7 @@ class AddRandomNoise(torch.nn.Module):
     .. properties:: Autograd TorchScript
     '''
 
-    def __init__(self, lengths: Optional[torch.Tensor] = None):
+    def __init__(self, lengths: Optional[torch.Tensor] = None, snr: float = None):
         r'''
         Args:
             snr (torch.Tensor): Signal-to-noise ratios in dB, with shape `(...,)`.
@@ -166,7 +166,10 @@ class AddRandomNoise(torch.nn.Module):
         '''
         super().__init__()
 
-        self.snr = torch.Tensor([1000.0]) # high value --> no noise initially
+        if snr != None:
+            self.snr = torch.Tensor([snr])
+        else:
+            self.snr = torch.Tensor([1000.0]) # high value --> no noise initially
         self.epoch = 0
         self.lengths = lengths
 

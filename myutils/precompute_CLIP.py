@@ -35,7 +35,7 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
     # Get Test Dataloader (VGGSound)
     subset=''
     train_dataset = VGGSoundDataset(data_path_dict['vggsound'], f'vggsound_train{subset}', is_train=True,
-        input_resolution=args.input_resolution, noise_transform=False, set_length=3)
+        input_resolution=args.input_resolution, noise_transform_train=False, set_length=3)
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=256,
         num_workers=args.num_workers, pin_memory=False, drop_last=True, worker_init_fn=seed_worker, shuffle=False)
