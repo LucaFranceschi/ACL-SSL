@@ -11,8 +11,6 @@ from datasets.Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
 from datasets.AVSBench.AVSBench_Dataset import AVSBenchDataset
 from datasets.vggsound.VGGSound_Dataset import VGGSoundDataset
 from datasets.AVATAR.AVATAR_Dataset import AVATARDataset
-from torch.cuda.amp import autocast, GradScaler
-from torch.utils.tensorboard import SummaryWriter
 from importlib import import_module
 from utils.eval import *
 
@@ -27,8 +25,6 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
     device = torch.device("cuda" if USE_CUDA else "cpu")
     print(f'Device: {device} is used\n')
     print(f'Testing {train_config_name} and storing results in {save_path}')
-
-    model_exp_name = os.listdir(os.path.join(save_path, 'Train_record'))[0]
 
     ''' Get train configure '''
     train_conf_file = f'./config/train/{train_config_name}.yaml'
@@ -84,8 +80,15 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
     avatar_dataloader = torch.utils.data.DataLoader(avatar_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1,
                                                     pin_memory=False, drop_last=True, collate_fn=avatar_collate_fn)
 
-    model_weights_names = os.listdir(os.path.join(save_path, 'Train_record', model_exp_name))
-    epoch_list = sorted(int(m.group(1)) for s in model_weights_names if (m := re.match(r'Param_(\d+).pth', s)))
+    if data_path_dict['model_weights'] == '':
+        model_exp_name = os.listdir(os.path.join(save_path, 'Train_record'))[0]
+        model_weights_names = os.listdir(os.path.join(save_path, 'Train_record', model_exp_name))
+        epoch_list = sorted(int(m.group(1)) for s in model_weights_names if (m := re.match(r'Param_(\d+).pth', s)))
+    else:
+        model_exp_name = f'{model_name}_{train_config_name}' if train_config_name != "" else model_name
+        match = re.search(r'Param_(.*).pth', data_path_dict['model_weights'])
+        if match:
+            epoch_list = [match.group(1)]
 
     best_scores = {
         'best_AUC': {'epoch': 0, 'AUC': 0.0, 'thr': 0.0},
@@ -109,7 +112,11 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
 
         ''' Make distributed data parallel module '''
         module = model
-        module.load(os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{epoch}.pth'))
+        if data_path_dict['model_weights'] == '':
+            module.load(os.path.join(save_path, 'Train_record', model_exp_name, f'Param_{epoch}.pth'))
+        else:
+            module.load(data_path_dict['model_weights'])
+
         module.train(False)
 
         eval_flickr_agg(module, flickr_dataloader, args, viz_dir_template.format('flickr'), epoch,
