@@ -20,3 +20,25 @@ s4_data
 ms3_data
 
 vggsound*.csv
+classes.csv
+
+old_outputs/
+
+**tmp**
+
+*.sif
+
+.acl-ssl2
+
+__pycache__
+
+*.env
+
+train_outputs
+
+val_audios*
+
+wandb
+
+*/AVATAR/metadata
+**/video

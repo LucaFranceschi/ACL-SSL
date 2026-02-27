@@ -17,7 +17,7 @@ common:
     - 1
     - 1
   san: True
-  san_real: False
+  san_real: True
   san_added_noise_tr: False
   san_added_noise_schedule_k: 5
 

@@ -1,4 +1,6 @@
 **/audio
+**/audio_8s
+**/audio_3s
 **/extend_audio
 **/frames
 **/extend_frames
@@ -8,6 +10,7 @@
 **/AVS1
 
 .git
+old_outputs
 outputs
 pretrain
 Visual_results*
@@ -17,3 +20,23 @@ Train_record*
 **/s4_data
 
 **/.gitkeep
+
+**tmp**
+
+__pycache__
+
+train_outputs
+
+vggsound/val_audios*
+
+wandb
+
+.vscode
+
+*.sif
+
+precomputed*
+
+.venv
+
+*/AVATAR/metadata

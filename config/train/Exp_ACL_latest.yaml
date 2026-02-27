@@ -2,7 +2,7 @@ model: ACL
 
 common:
   train_data: vggsound
-  epoch: 20
+  epoch: 3
   batch_size: 8
   input_resolution: 352
   ground_truth_resolution: 224
@@ -12,13 +12,19 @@ common:
     - acl_i
     - acl_f
     - area_reg
+    - silence_l
+    - noise_l
+    - diff_san_l
   loss_w:
     - 1
     - 1
     - 1
+    - 1
+    - 1
+    - 1
   san: True
-  san_real: False
-  san_added_noise_tr: False
+  san_real: True
+  san_added_noise_tr: True
   san_added_noise_schedule_k: 5
 
 optimizer: Adam
