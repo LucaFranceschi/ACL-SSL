@@ -1,37 +1,31 @@
-import torch
 import os
 import sys
-
 import time
 import datetime
 import yaml
 import shutil
 import argparse
-
-from tqdm import tqdm
-from utils.util import get_prompt_template, fix_seed, seed_worker
-from datasets.VGGSS.VGGSS_Dataset import VGGSSDataset, ExtendVGGSSDataset
-from datasets.Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
-from datasets.AVSBench.AVSBench_Dataset import AVSBenchDataset
-from datasets.vggsound.VGGSound_Dataset import VGGSoundDataset
-from torch.cuda.amp import autocast, GradScaler
-from torch.utils.tensorboard import SummaryWriter
-from importlib import import_module
-from utils.eval import *
-from contextlib import nullcontext
-
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data.distributed import DistributedSampler
-
-import numpy as np
-
 import gc
 import re
-
-from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
-
 import wandb
+
+import numpy as np
+from tqdm import tqdm
+from importlib import import_module
+from contextlib import nullcontext
+
+import torch
+import torch.distributed as dist
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel
+from torch.cuda.amp import autocast, GradScaler
+from torch.utils.tensorboard import SummaryWriter
+
+from utils.util import get_prompt_template, fix_seed, seed_worker
+from datasets.vggsound.VGGSound_Dataset import VGGSoundDataset
+from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
+from utils.eval import eval_vggsound_validation
+
 
 def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path, recover_from = None):
     """

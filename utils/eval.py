@@ -484,7 +484,7 @@ def eval_vggss_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/{test_split}({thr})', std_metrics, epoch)
 
         best_AUC = [std_metrics['AUC'], thr] if best_AUC[0] < std_metrics['AUC'] else best_AUC
 
@@ -631,7 +631,7 @@ def eval_avsbench_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avs/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/avs/{test_split}({thr})', std_metrics, epoch)
 
         if snr != None:
             msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
@@ -769,7 +769,7 @@ def eval_flickr_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/{test_split}({thr})', std_metrics, epoch)
 
         if snr != None:
             msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
@@ -891,7 +891,7 @@ def eval_exvggss_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/{test_split}({thr})', std_metrics, epoch)
 
 
         if snr != None:
@@ -1014,7 +1014,7 @@ def eval_exflickr_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/{test_split}({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/{test_split}({thr})', std_metrics, epoch)
 
         if snr != None:
             msg += f'{model.__class__.__name__} ({test_split} with thr = {thr} evaluated with Silence)\n'
@@ -1218,7 +1218,7 @@ def eval_avatar_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avatar/{test_split}_seg({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_seg({thr})', std_metrics, epoch)
 
         if snr != None:
             msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr} evaluated with Silence)\n'
@@ -1238,7 +1238,7 @@ def eval_avatar_agg(
         msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
 
         if tensorboard_path is not None and epoch is not None:
-            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ''}/avatar/{test_split}_bb({thr})', std_metrics, epoch)
+            writer.add_scalars(f'test/std{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_bb({thr})', std_metrics, epoch)
 
         if snr != None:
             msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr} evaluated with Silence)\n'

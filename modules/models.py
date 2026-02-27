@@ -227,10 +227,10 @@ class ACL(nn.Module):
         outputs = self.av_grounder.clip.vision_model(
             pixel_values=pixel_values,
             output_attentions=None,
-            output_hidden_states=True,
-            return_dict=True
+            output_hidden_states=False,
+            return_dict=False
         )
-        return outputs
+        return outputs[1]
 
     def encode_masked_vision(self, image: torch.Tensor, embedding: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, float, float]:
         """
@@ -258,12 +258,16 @@ class ACL(nn.Module):
         # Image level masker
         ind = torch.arange(B).to(image.device)
         image_mask = self.masker_i(clipseg_mask[ind, ind].unsqueeze(1))  # Positive pair only
-        feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask) / (feature_mask.sum() + 1e-6)
+        # feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask) / (feature_mask.sum() + 1e-6)
+        feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask)
+        denom = feature_mask.sum(dim=(2, 3), keepdim=True).clamp_min(1e-6)  # [B, B, 1, 1]
+        feature_masked_emb = feature_masked_emb / denom.squeeze(-1)  # [B, B, C] / [B, B, 1]
 
         # step 1: forward the query images through the frozen CLIP vision encoder
-        masked_vision_outputs = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+        masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+        # masked_vision_outputs = self._vision_impl(image * image_mask)
 
-        masked_image_emb = self.av_grounder.clip.visual_projection(masked_vision_outputs[1])
+        masked_image_emb = self.av_grounder.clip.visual_projection(masked_vision_outputs_pooled)
 
         return feature_masked_emb, masked_image_emb, positive_area, negative_area
 
