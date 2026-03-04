@@ -3,10 +3,10 @@ model: ACL
 common:
   train_data: vggsound
   epoch: 20
-  batch_size: 16
+  batch_size: 32
   input_resolution: 352
   ground_truth_resolution: 224
-  num_workers: 4
+  num_workers: 32
   seed: 0
   loss:
     - acl_i

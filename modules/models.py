@@ -171,7 +171,8 @@ class ACL(nn.Module):
         Returns:
             torch.Tensor: Logits from the decoder.
         """
-        logits = checkpoint(self._forward_decoder, image, embedding, use_reentrant=False)
+        # logits = checkpoint(self._forward_decoder, image, embedding, use_reentrant=False)
+        logits = self._forward_decoder(image, embedding)
 
         if logits.ndim == 2:
             logits = logits.unsqueeze(0).unsqueeze(1)
@@ -264,8 +265,8 @@ class ACL(nn.Module):
         feature_masked_emb = feature_masked_emb / denom.squeeze(-1)  # [B, B, C] / [B, B, 1]
 
         # step 1: forward the query images through the frozen CLIP vision encoder
-        masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
-        # masked_vision_outputs = self._vision_impl(image * image_mask)
+        # masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+        masked_vision_outputs_pooled = self._vision_impl(image * image_mask)
 
         masked_image_emb = self.av_grounder.clip.visual_projection(masked_vision_outputs_pooled)
 

@@ -7,8 +7,10 @@ import os, shutil
 
 if __name__ == '__main__':
 
-    src_data_dir = '/projects/imva/vggsound/train/total_video_frames'
-    dst_data_dir = '/home/lfranceschi/repos/ACL-SSL/vggsound/frames'
+    # src_data_dir = '/projects/imva/vggsound/train/total_video_frames'
+    # dst_data_dir = '/home/lfranceschi/repos/ACL-SSL/vggsound/frames'
+    src_data_dir = '/data/upftfg27/lfranceschi/vggsound/train/total_video_frames'
+    dst_data_dir = '/data/upftfg27/lfranceschi/datasets/vggsound/frames'
 
     os.makedirs(dst_data_dir, exist_ok=True)
 
@@ -25,4 +27,4 @@ if __name__ == '__main__':
         if i%100 == 0:
             print(f'Moving file {i}/{len(video_names)}')
 
-        shutil.copy(os.path.join(src_data_dir, v_name, center_frame), os.path.join(dst_data_dir, v_name + '.jpg'))
+        shutil.move(os.path.join(src_data_dir, v_name, center_frame), os.path.join(dst_data_dir, v_name + '.jpg'))

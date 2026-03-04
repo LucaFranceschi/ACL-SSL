@@ -43,7 +43,7 @@ def eval_vggsound_validation(
     epoch: Optional[int],
     tensorboard_path: Optional[str] = None,
     rank = 0,
-    wandb_run: Optional[wandb.Run] = None,
+    wandb_run = None,
     data_path_dict: dict = {},
     use_cuda = False,
     use_amp = False

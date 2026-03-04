@@ -69,7 +69,7 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     wandb_run = None
     if rank == 0 and WANDB_LOGGING:
-        wandb_run = wandb.init(project=os.getenv('WANDB_PROJECT_NAME'), entity=os.getenv('WANDB_ENTITY_TEAM'), config=vars(args))
+        wandb_run = wandb.init(project=os.getenv('WANDB_PROJECT_NAME'), entity=os.getenv('WANDB_ENTITY_TEAM'), config=vars(args), dir=os.getenv('WANDB_PATH_LOGS'))
         wandb.define_metric("train/*", step_metric="trainer/train_step")
         wandb.define_metric("train_losses/*", step_metric="trainer/train_step")
         wandb.define_metric("validation/*", step_metric="trainer/val_step")
@@ -327,9 +327,12 @@ if __name__ == "__main__":
     parser.add_argument('--avs_path', type=str, default='', help='AVSBench dataset directory')
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
     parser.add_argument('--san_path', type=str, default='', help='Silence and noise data directory')
-    parser.add_argument('--local_rank', type=str, default='', help='Rank for distributed train')
     parser.add_argument('--recover_from', type=str, default=None, help='Path to weights for recover after crash')
     parser.add_argument('--wandb_logging', action='store_true', help='Login to wandb and log losses and experiments')
+
+    # parser.add_argument('--local_rank', type=str, default='', help='Rank for distributed train')
+    # local_rank = int(os.environ['LOCAL_RANK'])
+    local_rank = int(os.environ.get('LOCAL_RANK', '0'))
 
     args = parser.parse_args()
 
