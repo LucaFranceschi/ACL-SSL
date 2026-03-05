@@ -1,10 +1,12 @@
 import torch
 import os
+import datetime
 
 import yaml
 import argparse
 
 from tqdm import tqdm
+import torch.distributed as dist
 from utils.util import get_prompt_template, fix_seed, seed_worker
 from datasets.VGGSS.VGGSS_Dataset import VGGSSDataset, ExtendVGGSSDataset
 from datasets.Flickr.Flickr_Dataset import FlickrDataset, ExtendFlickrDataset
@@ -22,7 +24,15 @@ from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audio
 
 @torch.no_grad()
 def main(model_name, model_path, train_config_name, data_path_dict, save_path):
-    device = torch.device("cuda" if USE_CUDA else "cpu")
+    if USE_DDP:
+        dist.init_process_group("nccl", timeout=datetime.timedelta(seconds=9000))
+        global rank
+        rank = dist.get_rank()
+        torch.cuda.set_device(rank)
+        world_size = dist.get_world_size()
+        print(f'World size: {world_size}') if rank == 0 else None
+
+    device = torch.device('cuda', torch.cuda.current_device()) if USE_CUDA else torch.device('cpu')
     print(f'Device: {device} is used\n')
     print(f'Testing {train_config_name} and storing results in {save_path}')
 
@@ -89,6 +99,9 @@ def main(model_name, model_path, train_config_name, data_path_dict, save_path):
         match = re.search(r'Param_(.*).pth', data_path_dict['model_weights'])
         if match:
             epoch_list = [match.group(1)]
+
+    # distribute
+    epoch_list = epoch_list[rank::NUM_GPUS]
 
     best_scores = {
         'best_AUC': {'epoch': 0, 'AUC': 0.0, 'thr': 0.0},
@@ -167,6 +180,7 @@ if __name__ == "__main__":
     parser.add_argument('--vggsound_path', type=str, default='', help='VGGSound dataset directory')
     parser.add_argument('--avatar_path', type=str, default='', help='AVATAR dataset directory')
     parser.add_argument('--san_path', type=str, default='', help='Silence and noise data directory')
+    parser.add_argument('--local_rank', type=str, default='', help='Rank for distributed train')
 
     args = parser.parse_args()
 
@@ -182,8 +196,8 @@ if __name__ == "__main__":
 
     # Check the number of GPUs for training
     NUM_GPUS = len(os.environ.get('CUDA_VISIBLE_DEVICES', '').split(','))
+    USE_DDP = True if NUM_GPUS > 1 else False
 
-    if NUM_GPUS == 1:
-        main(args.model_name, args.model_path, args.train_config, data_path, args.save_path)
+    main(args.model_name, args.model_path, args.train_config, data_path, args.save_path)
 
     exit(1)
