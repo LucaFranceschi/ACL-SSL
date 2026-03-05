@@ -258,10 +258,8 @@ class ACL(nn.Module):
         # Image level masker
         ind = torch.arange(B).to(image.device)
         image_mask = self.masker_i(clipseg_mask[ind, ind].unsqueeze(1))  # Positive pair only
-        # feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask) / (feature_mask.sum() + 1e-6)
-        feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask)
-        denom = feature_mask.sum(dim=(2, 3), keepdim=True).clamp_min(1e-6)  # [B, B, 1, 1]
-        feature_masked_emb = feature_masked_emb / denom.squeeze(-1)  # [B, B, C] / [B, B, 1]
+        norm_feat_mask = feature_mask.sum(dim=(-2,-1)).clamp(1e-6).unsqueeze(-1) # [B, N, 1]
+        feature_masked_emb = torch.einsum('bchw,bnhw->bnc', maskclip_feat, feature_mask) / norm_feat_mask
 
         # step 1: forward the query images through the frozen CLIP vision encoder
         masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
