@@ -174,8 +174,8 @@ class ACL(nn.Module):
         Returns:
             torch.Tensor: Logits from the decoder.
         """
-        # logits = checkpoint(self._forward_decoder, image, embedding, use_reentrant=False)
-        logits = self._forward_decoder(image, embedding)
+        logits = checkpoint(self._forward_decoder, image, embedding, use_reentrant=False)
+        # logits = self._forward_decoder(image, embedding)
 
         if logits.ndim == 2:
             logits = logits.unsqueeze(0).unsqueeze(1)
@@ -269,8 +269,6 @@ class ACL(nn.Module):
         Helper to run just the vision model.
         This allows us to checkpoint the massive ViT pass.
         """
-        # We only need the pooled output (index 1) usually, but your code uses hidden states too.
-        # For encode_masked_vision, you only use [1] (pooled).
         outputs = self.av_grounder.clip.vision_model(
             pixel_values=pixel_values,
             output_attentions=None,
@@ -306,19 +304,21 @@ class ACL(nn.Module):
 
         if B == embedding.shape[0]:
             # Image level masker
-            ind = torch.arange(B).to(image.device) # POSSIBLE BUG HERE TRY WITH MIN OF B AND N
+            ind = torch.arange(B).to(image.device)
             image_mask = self.masker_i(clipseg_mask[ind, ind].unsqueeze(1))  # Positive pair only
 
             # step 1: forward the query images through the frozen CLIP vision encoder
-            # masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
-            masked_vision_outputs_pooled = self._vision_impl(image * image_mask)
+            masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+            # masked_vision_outputs_pooled = self._vision_impl(image * image_mask)
 
             masked_image_emb = self.av_grounder.clip.visual_projection(masked_vision_outputs_pooled)
         else:
             masked_image_emb = []
             for n in range(embedding.shape[0]):
                 image_mask = self.masker_i(clipseg_mask[:, n].unsqueeze(1))
-                masked_vision_outputs_pooled = self._vision_impl(image * image_mask)
+                masked_vision_outputs_pooled = checkpoint(self._vision_impl, image * image_mask, use_reentrant=False)
+                # masked_vision_outputs_pooled = self._vision_impl(image * image_mask)
+
                 masked_image_emb.append(self.av_grounder.clip.visual_projection(masked_vision_outputs_pooled))
             masked_image_emb = torch.cat(masked_image_emb, dim=1)
 
