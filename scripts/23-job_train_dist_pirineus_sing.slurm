@@ -27,5 +27,5 @@ singularity run --userns --nv --bind /home/lfranceschi/repos/ACL-SSL,$DATA $DATA
 /home/lfranceschi/repos/ACL-SSL/scripts/3-distributed_train_pirineus.sh $EXPERIMENT_VERSION
 
 if (( $? == 0 )); then
-    rsync -avz $DATA/train_outputs/$SLURM_JOBID /home/lfranceschi/repos/ACL-SSL/train_outputs/$SLURM_JOBID
+    rsync -avz $DATA/train_outputs/$SLURM_JOBID /home/lfranceschi/repos/ACL-SSL/train_outputs/
 fi
