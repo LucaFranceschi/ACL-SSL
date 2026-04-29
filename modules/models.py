@@ -236,7 +236,7 @@ class ACL(nn.Module):
         embedding = F.normalize(embedding) # [B, C]
 
         v_d = self.av_grounder.get_pixels(image) # v^D: [B, C, h, w] // [16, 512, 22, 22]
-        v_d_sim = torch.einsum('bchw,bc->bhw', F.normalize(v_d), embedding) # cosine similarity --> range [-1, 1] // [16, 22, 22]
+        v_d_sim = torch.einsum('bchw,bc->bhw', F.normalize(v_d), embedding).unsqueeze(1) # cosine similarity --> range [-1, 1] // [16, 1, 22, 22]
         v_d_seg = (v_d_sim + 1) / 2 # rescaled to range [0, 1]
 
         seg_logit = self.forward_decoder(image, embedding, h) # M^G: [B, 1, h, w] // [16, 1, 352, 352]
@@ -255,6 +255,9 @@ class ACL(nn.Module):
         # this is because we need h resolution for the get_pixels, but need resolution for the rest of the evaluation
         if image_mask.shape[2] != resolution:
             image_mask = F.interpolate(image_mask, resolution)
+
+        if v_d_seg.shape[2] != resolution:
+            v_d_seg = F.interpolate(v_d_seg, resolution)
 
         # these are the values that I will have to store min/max values for boxplots
         return {
@@ -380,6 +383,10 @@ class ACL(nn.Module):
             pred_emb_noise = kwargs.get('pred_emb_noise', None)
             if pred_emb_noise != None:
                 out_dict['noise'] = self.forward_module_eval(image, pred_emb_noise.repeat(pred_emb.shape[0], 1), resolution)
+
+            pred_emb_offscreen = kwargs.get('pred_emb_offscreen', None)
+            if pred_emb_offscreen != None:
+                out_dict['offscreen'] = self.forward_module_eval(image, pred_emb_offscreen, resolution)
 
         return out_dict
 
