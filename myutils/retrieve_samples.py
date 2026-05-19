@@ -13,6 +13,7 @@ Prompts used:
 
         given this sample output, load these three lists into a pandas dataframe (with the same order) to be able to retrieve the sample names with highest/lowest cious/pias
     3. this is obviously not what i wanted. it is outside the function where i am loading the files, the get_files does not return three lists, and all the processing  of the lists needs to happen within the get_files function keeping the main function clean
+    4. i have generated a string with a seemingly valid bash script to download files from a remote. write it to a file and execute it OR execute it directly from within this python script
 Example usage:
     python retrieve_samples.py --mode best -n 10 ../train_outputs/2214807/Test_record/ACL_ViT16_Exp_ACL_v1/dumps/epochbest
 """
@@ -23,6 +24,7 @@ import json
 import argparse
 from pathlib import Path
 import pandas as pd
+import subprocess
 
 def get_files(dumps_path, mode, n):
     """Load and process samples data into a DataFrame."""
@@ -128,11 +130,20 @@ def main():
     print(f"Mode: {args.mode}")
     print(f"Number: {args.number}")
 
-    # Your code here
     filenames = get_files(args.path, args.mode, args.number)
-
     script = generate_download_script(filenames, args.path, args.remote_basedir)
-    print(script)
+
+    # Write to file
+    script_path = "download_script.sh"
+    with open(script_path, 'w') as f:
+        f.write(script)
+
+    print(f"Script written to {script_path}")
+
+    # Make executable and run
+    subprocess.run(['chmod', '+x', script_path], check=True)
+    subprocess.run(['bash', script_path], check=True)
+    print("Script executed successfully!")
 
 if __name__ == "__main__":
     main()
