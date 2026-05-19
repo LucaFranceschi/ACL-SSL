@@ -37,18 +37,15 @@ def get_files(dumps_path, mode, n):
 
     # Create DataFrame
     df = pd.DataFrame({
-        'sample_id': samples,
+        'samples': samples,
         'cious': [x[0] if isinstance(x, list) else x for x in cious],
         'pias': [x[0] if isinstance(x, list) else x for x in pias]
     })
 
-    # Get best/worst samples based on mode
-    if mode == 'best':
-        result = df.nlargest(n, 'cious')
-    else:  # worst
-        result = df.nsmallest(n, 'cious')
+    # print(df.head())
+    sorted_df = df.sort_values('cious', ascending=(mode == 'worst')).head(n)
 
-    return result
+    return list(sorted_df['samples'])
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -102,7 +99,7 @@ def main():
     print(f"Number: {args.number}")
 
     # Your code here
-    get_files(args.path, args.mode, args.number)
+    print(get_files(args.path, args.mode, args.number))
 
 if __name__ == "__main__":
     main()
