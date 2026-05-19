@@ -24,9 +24,9 @@ def get_files(dumps_path, mode, n):
     with open(os.path.join(dumps_path, 'pIAs_ordered_univ_m_i.txt')) as f:
         pias = json.load(f)
 
-    print(type(cious), len(cious))
-    print(type(samples), len(samples))
-    print(type(pias), len(pias))
+    print(type(cious), len(cious), cious[:5])
+    print(type(samples), len(samples), samples[:5])
+    print(type(pias), len(pias), pias[:5])
 
 def parse_arguments():
     """Parse command-line arguments."""
