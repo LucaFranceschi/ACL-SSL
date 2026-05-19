@@ -25,6 +25,7 @@ import argparse
 from pathlib import Path
 import pandas as pd
 import subprocess
+import time
 
 def get_files(dumps_path, mode, n):
     """Load and process samples data into a DataFrame."""
@@ -48,7 +49,7 @@ def get_files(dumps_path, mode, n):
 
     return list(sorted_df['samples'])
 
-def generate_download_script(filenames, dumps_path, remote_basedir):
+def generate_download_script(filenames, dumps_path, remote_basedir, mode):
 
     visual_results_path = str(dumps_path).replace('dumps/', '')
     visual_results_path = visual_results_path.replace('Test_record', 'Visual_results_test/vggss')
@@ -58,12 +59,12 @@ def generate_download_script(filenames, dumps_path, remote_basedir):
 
     for viz_type in ['overlaid', 'heatmap', 'heatmap_v_d']:
         download_script += '\n'
-        download_script += f'mkdir -p {os.path.join(visual_results_path, viz_type)}\n'
+        download_script += f'mkdir -p {os.path.join(visual_results_path, mode, viz_type)}\n'
 
         for f in filenames:
             download_script += (
                 f'scp {os.path.join(remote_basedir, visual_results_path.strip('../'), viz_type, f + '.jpg')} '
-                f'{os.path.join(visual_results_path, viz_type, f + '.jpg')}'
+                f'{os.path.join(visual_results_path, mode, viz_type, f + '.jpg')}'
                 '\n'
             )
 
@@ -131,10 +132,10 @@ def main():
     print(f"Number: {args.number}")
 
     filenames = get_files(args.path, args.mode, args.number)
-    script = generate_download_script(filenames, args.path, args.remote_basedir)
+    script = generate_download_script(filenames, args.path, args.remote_basedir, args.mode)
 
     # Write to file
-    script_path = "download_script.sh"
+    script_path = f"subscripts/{int(time.time())}.sh"
     with open(script_path, 'w') as f:
         f.write(script)
 
