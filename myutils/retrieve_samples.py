@@ -42,10 +42,32 @@ def get_files(dumps_path, mode, n):
         'pias': [x[0] if isinstance(x, list) else x for x in pias]
     })
 
-    # print(df.head())
     sorted_df = df.sort_values('cious', ascending=(mode == 'worst')).head(n)
 
     return list(sorted_df['samples'])
+
+def generate_download_script(filenames, dumps_path, remote_basedir):
+
+    visual_results_path = str(dumps_path).replace('dumps/', '')
+    visual_results_path = visual_results_path.replace('Test_record', 'Visual_results_test/vggss')
+
+    download_script = '#! /usr/bin/env bash\n'
+    download_script += 'set -euo pipefail\n'
+
+    for viz_type in ['overlaid', 'heatmap', 'heatmap_v_d']:
+        download_script += '\n'
+        download_script += f'mkdir -p {os.path.join(visual_results_path, viz_type)}\n'
+
+        for f in filenames:
+            download_script += (
+                f'scp {os.path.join(remote_basedir, visual_results_path.strip('../'), viz_type, f + '.jpg')} '
+                f'{os.path.join(visual_results_path, viz_type, f + '.jpg')}'
+                '\n'
+            )
+
+    download_script += '\n'
+
+    return download_script
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -77,6 +99,14 @@ def parse_arguments():
         help="Positive integer representing the number of samples"
     )
 
+    parser.add_argument(
+        "-r",
+        "--remote_basedir",
+        type=Path,
+        required=True,
+        help="Remote basedir with hostname and all"
+    )
+
     args = parser.parse_args()
 
     # Validate path exists
@@ -99,7 +129,10 @@ def main():
     print(f"Number: {args.number}")
 
     # Your code here
-    print(get_files(args.path, args.mode, args.number))
+    filenames = get_files(args.path, args.mode, args.number)
+
+    script = generate_download_script(filenames, args.path, args.remote_basedir)
+    print(script)
 
 if __name__ == "__main__":
     main()
