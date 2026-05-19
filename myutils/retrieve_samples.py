@@ -57,14 +57,25 @@ def generate_download_script(filenames, dumps_path, remote_basedir, mode):
     download_script = '#! /usr/bin/env bash\n'
     download_script += 'set -euo pipefail\n'
 
-    for viz_type in ['overlaid', 'heatmap', 'heatmap_v_d']:
+    for f in filenames:
         download_script += '\n'
-        download_script += f'mkdir -p {os.path.join(visual_results_path, mode, viz_type)}\n'
+        download_script += f'mkdir -p {os.path.join(visual_results_path, mode, f)}\n'
 
-        for f in filenames:
+        download_script += (
+            f'scp {os.path.join(remote_basedir, 'datasets/VGGSS/audio/', f + '.wav')} '
+            f'{os.path.join(visual_results_path, mode, f, 'audio.wav')}'
+            '\n'
+        )
+        download_script += (
+            f'scp {os.path.join(remote_basedir, 'datasets/VGGSS/frames/', f + '.jpg')} '
+            f'{os.path.join(visual_results_path, mode, f, 'original_frame.jpg')}'
+            '\n'
+        )
+
+        for viz_type in ['overlaid', 'heatmap', 'heatmap_v_d', 'overall']:
             download_script += (
                 f'scp {os.path.join(remote_basedir, visual_results_path.strip('../'), viz_type, f + '.jpg')} '
-                f'{os.path.join(visual_results_path, mode, viz_type, f + '.jpg')}'
+                f'{os.path.join(visual_results_path, mode, f, viz_type + '.jpg')}'
                 '\n'
             )
 
