@@ -2,12 +2,31 @@
 Apart of serving the purpose I need this file for, I will also use it as an example on the use of AI in this project.
 
 Prompt used: generate the template / boilerplate code for a python script that has to parse a path argument, a best/worst argument, and a positive integer n
+
+Example usage:
+    python retrieve_samples.py --mode best -n 10 ../train_outputs/2214807/Test_record/ACL_ViT16_Exp_ACL_v1/dumps/epochbest
 """
 
 
+import os
+import json
 import argparse
 from pathlib import Path
+import pandas as pd
 
+def get_files(dumps_path, mode, n):
+    with open(os.path.join(dumps_path, 'cIoUs_ordered_univ_m_i.txt')) as f:
+        cious = json.load(f)
+
+    with open(os.path.join(dumps_path, 'frame_names.txt')) as f:
+        samples = json.load(f)
+
+    with open(os.path.join(dumps_path, 'pIAs_ordered_univ_m_i.txt')) as f:
+        pias = json.load(f)
+
+    print(type(cious), len(cious))
+    print(type(samples), len(samples))
+    print(type(pias), len(pias))
 
 def parse_arguments():
     """Parse command-line arguments."""
@@ -61,7 +80,7 @@ def main():
     print(f"Number: {args.number}")
 
     # Your code here
-
+    get_files(args.path, args.mode, args.number)
 
 if __name__ == "__main__":
     main()
