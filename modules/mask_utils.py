@@ -163,8 +163,8 @@ class TrainableADCLSigmoid(nn.Module):
 
     def forward(self, x, epsilon = True):
         if epsilon:
-            output = torch.sigmoid((x - self.epsilon) / self.tau)
+            output = torch.sigmoid((x - self.epsilon) / torch.clamp(self.tau, min=1e-6))
         else:
-            output = torch.sigmoid((x - self.epsilon2) / self.tau)
-
+            output = torch.sigmoid((x - self.epsilon2) / torch.clamp(self.tau, min=1e-6))
+    
         return output

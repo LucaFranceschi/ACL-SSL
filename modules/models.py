@@ -562,9 +562,9 @@ class ADCL(ACL):
         else:
             Neg_mask = 1 - Pos_mask
 
-        sim = (Pos_mask * sim_i_i).view(*sim_i_i.shape[:2],-1).sum(-1) / (Pos_mask.view(*Pos_mask.shape[:2],-1).sum(-1))                # easy positives [B, 1]
-        sim1 = (Pos_mask_i_j * sim_i_j).view(*sim_i_j.shape[:2],-1).sum(-1) / (Pos_mask_i_j.view(*Pos_mask_i_j.shape[:2],-1).sum(-1))   # easy negatives [B, B-1]
-        sim2 = (Neg_mask * sim_i_i).view(*sim_i_i.shape[:2],-1).sum(-1) / (Neg_mask.view(*Neg_mask.shape[:2],-1).sum(-1))               # hard negatives [B, 1]
+        sim = (Pos_mask * sim_i_i).view(*sim_i_i.shape[:2],-1).sum(-1) / (Pos_mask.view(*Pos_mask.shape[:2],-1).sum(-1) + 1e-8)                # easy positives [B, 1]
+        sim1 = (Pos_mask_i_j * sim_i_j).view(*sim_i_j.shape[:2],-1).sum(-1) / (Pos_mask_i_j.view(*Pos_mask_i_j.shape[:2],-1).sum(-1) + 1e-8)   # easy negatives [B, B-1]
+        sim2 = (Neg_mask * sim_i_i).view(*sim_i_i.shape[:2],-1).sum(-1) / (Neg_mask.view(*Neg_mask.shape[:2],-1).sum(-1) + 1e-8)               # hard negatives [B, 1]
 
         logits = torch.cat((sim, sim1, sim2), 1) # / self.temperature # done in loss
 

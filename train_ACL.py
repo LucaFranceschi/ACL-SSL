@@ -237,9 +237,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
             if scaler is None:
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
             else:
                 scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)  # Unscale before clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
 
