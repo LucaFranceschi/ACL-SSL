@@ -699,14 +699,14 @@ def eval_vggss_agg(
         # Visual results
         for j in range(test_dataloader.batch_size):
             seg = heatmaps['heatmap'][j:j+1]
-            seg_image = (1 - (seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
 
             os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
             cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
 
         for j in range(test_dataloader.batch_size):
             seg = heatmaps_v_d['heatmap'][j:j+1]
-            seg_image = (1 - (seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
 
             os.makedirs(f'{result_dir}/heatmap_v_d', exist_ok=True)
             cv2.imwrite(f'{result_dir}/heatmap_v_d/{name[j]}.jpg', seg_image)
