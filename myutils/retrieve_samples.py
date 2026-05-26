@@ -45,7 +45,20 @@ def get_files(dumps_path, mode, n):
         'pias': [x[0] if isinstance(x, list) else x for x in pias]
     })
 
-    sorted_df = df.sort_values('cious', ascending=(mode == 'worst')).head(n)
+    filtered_df = df[
+        (df['pias'] > 0.4) &
+        (df['pias'] < 0.7)
+    ]
+    # filtered_df = df[
+    #     (df['pias'] < 0.3)
+    # ]
+    # filtered_df = df[
+    #     (df['pias'] > 0.7)
+    # ]
+    # filtered_df = df
+
+    sorted_df = filtered_df.sort_values('cious', ascending=(mode == 'worst')).head(n)
+    print(sorted_df)
 
     return list(sorted_df['samples'])
 
@@ -74,7 +87,7 @@ def generate_download_script(filenames, dumps_path, remote_basedir, mode):
 
         for viz_type in ['overlaid', 'heatmap', 'heatmap_v_d', 'overall']:
             download_script += (
-                f'scp {os.path.join(remote_basedir, visual_results_path.strip('../'), viz_type, f + '.jpg')} '
+                f'scp {os.path.join(remote_basedir, visual_results_path.strip('../').replace('_viz', ''), viz_type, f + '.jpg')} '
                 f'{os.path.join(visual_results_path, mode, f, viz_type + '.jpg')}'
                 '\n'
             )
@@ -153,8 +166,8 @@ def main():
     print(f"Script written to {script_path}")
 
     # Make executable and run
-    subprocess.run(['chmod', '+x', script_path], check=True)
-    subprocess.run(['bash', script_path], check=True)
+    # subprocess.run(['chmod', '+x', script_path], check=True)
+    # subprocess.run(['bash', script_path], check=True)
     print("Script executed successfully!")
 
 if __name__ == "__main__":
