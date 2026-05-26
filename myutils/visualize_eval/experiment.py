@@ -113,8 +113,4 @@ def print_all_metrics(experiments_epochs, thr, seg_item, snr=False):
                     df = pivot_df
                 else:
                     df = pd.concat([df, pivot_df])
-    if df is not None:
-        df = df.reorder_levels(['dataset', 'model', 'epoch']).sort_index()
-        print(df)
-        df.to_clipboard(header=True, sep='\t')
-        df.to_csv((f'outputs/ACL-comp-{"noisy-" if snr else ""}{seg_item}-{thr}.csv'))
+    return df
