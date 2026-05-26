@@ -17,7 +17,7 @@ cd $REPO
 mkdir -p $SAVE_PATH
 
 python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port 12345 extract_univ_th_ACL.py \
---model_name ADCL_ViT16 \
+--model_name ADCL_ViT16-v2 \
 --model_path $REPO/pretrain \
 --train_config $EXPERIMENT_VERSION \
 --vggss_path $DATA/VGGSS \
