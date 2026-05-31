@@ -648,4 +648,20 @@ class ADCL(ACL):
         ckp = torch.load(model_dir, map_location=self.device)
         self.audio_proj.load_state_dict(ckp['audio_proj'])
         self.masker_i.load_state_dict(ckp['masker_i'])
-        self.m.load_state_dict(ckp['m'])
+        try:
+            self.m.load_state_dict(ckp['m'])
+        except Exception as e:
+            self.m = TrainableADCLSigmoid(
+                self.args.model.epsilon,
+                self.args.model.epsilon2,
+                self.args.model.tau,
+                False
+            )
+        finally:
+            print('Sigmoid params:')
+            for key, value in self.m.state_dict().items():
+                print('   ', key, value)
+
+    def train(self, bool: bool = True):
+        super().train(bool)
+        self.m.train(bool)

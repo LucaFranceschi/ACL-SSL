@@ -88,6 +88,77 @@ class Experiment(object):
         boxplots_by_dataset(self.infer_info, dataset_name, self.thresholds, epochs,
                             th_name=th_name, min_max=min_max, seg_item=seg_item, experiment_name=self.name)
 
+    def describe(self, dataset=None, epoch=None, audio_type=None, snr=None, min_max=None, seg_item=None, run=None):
+        """
+        Describe the data arrays in infer_info filtered by the given criteria.
+        Only filters by parameters that are not None. Unspecified columns show all values.
+        Results are sorted by audio_type in order: pos, sil, noi, off
+
+        Parameters
+        ----------
+        dataset : str, optional
+        epoch : str/int, optional
+        audio_type : str, optional
+        snr : int, optional
+        min_max : str, optional
+        seg_item : str, optional
+        run : str, optional
+
+        Returns
+        -------
+        pd.DataFrame
+            Descriptive statistics (count, mean, std, min, q25, q50, q75, max)
+        """
+        df = self.infer_info.copy()
+
+        # Apply filters for each non-None parameter
+        if dataset is not None:
+            df = df[df['dataset'] == dataset]
+        if epoch is not None:
+            df = df[df['epoch'] == epoch]
+        if audio_type is not None:
+            df = df[df['audio_type'] == audio_type]
+        if snr is not None:
+            df = df[df['snr'] == snr]
+        if min_max is not None:
+            df = df[df['min_max'] == min_max]
+        if seg_item is not None:
+            df = df[df['seg_item'] == seg_item]
+        if run is not None:
+            df = df[df['run'] == run]
+
+        # Extract descriptive statistics from data arrays
+        results = []
+        for idx, row in df.iterrows():
+            data_array = row['data']
+            stats = {
+                'epoch': row['epoch'],
+                'audio_type': row['audio_type'],
+                'snr': row['snr'],
+                'dataset': row['dataset'],
+                'min_max': row['min_max'],
+                'seg_item': row['seg_item'],
+                'run': row['run'],
+                'count': len(data_array),
+                'mean': np.mean(data_array),
+                'std': np.std(data_array),
+                'min': np.min(data_array),
+                'q25': np.percentile(data_array, 25),
+                'q50': np.percentile(data_array, 50),
+                'q75': np.percentile(data_array, 75),
+                'max': np.max(data_array),
+            }
+            results.append(stats)
+
+        result_df = pd.DataFrame(results)
+
+        # Sort by audio_type in custom order: pos, sil, noi, off
+        audio_type_order = pd.CategoricalDtype(categories=['pos', 'sil', 'noi', 'off'], ordered=True)
+        result_df['audio_type'] = result_df['audio_type'].astype(audio_type_order)
+        result_df = result_df.sort_values('audio_type')
+
+        return result_df
+
 
 def print_all_metrics(experiments_epochs, thr, seg_item, snr=False):
     '''
@@ -107,7 +178,10 @@ def print_all_metrics(experiments_epochs, thr, seg_item, snr=False):
         if exp.thresholds is None:
             raise Exception('Load inference info first!!')
         for e in epoch_list:
-            pivot_df = exp._print_metrics(e, thr=thr, seg_item=seg_item, snr=snr)
+            if exp_name == 'frank':
+                pivot_df = exp._print_metrics(e, thr=thr, seg_item='v_d', snr=snr)
+            else:
+                pivot_df = exp._print_metrics(e, thr=thr, seg_item=seg_item, snr=snr)
             if pivot_df is not None:
                 if df is None:
                     df = pivot_df
