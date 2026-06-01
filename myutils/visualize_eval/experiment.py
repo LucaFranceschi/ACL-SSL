@@ -178,7 +178,8 @@ def print_all_metrics(experiments_epochs, thr, seg_item, snr=False):
         if exp.thresholds is None:
             raise Exception('Load inference info first!!')
         for e in epoch_list:
-            if exp_name == 'frank':
+            # if exp_name == 'frank':
+            if exp_name == 'ADCL_v1_B16':
                 pivot_df = exp._print_metrics(e, thr=thr, seg_item='v_d', snr=snr)
             else:
                 pivot_df = exp._print_metrics(e, thr=thr, seg_item=seg_item, snr=snr)

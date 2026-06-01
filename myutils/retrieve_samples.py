@@ -159,7 +159,7 @@ def main():
     script = generate_download_script(filenames, args.path, args.remote_basedir, args.mode)
 
     # Write to file
-    script_path = f"subscripts/{int(time.time())}.sh"
+    script_path = f"subscripts/adcl-{int(time.time())}.sh"
     with open(script_path, 'w') as f:
         f.write(script)
 

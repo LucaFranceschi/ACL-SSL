@@ -43,14 +43,22 @@ except ImportError:
 
 ROOT = "train_outputs"   # path to the train_outputs directory
 
+# EXP_DUMPS_PATH = {
+#     'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
+#     'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+#     'ACL_v1_B32':   'pirineus3/2064866/2223546/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch19',
+#     'ACL_v2_B16':   'pirineus3/2168632/2223544/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
+#     'ACL_v3_B16':   'pirineus3/2210849/2223545/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch15',
+#     'ACL_v4_B16':   'pirineus3/2271991/2223547/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch18',
+#     'ACL_v5_B16':   'pirineus3/2568854/2223548/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
+# }
+
 EXP_DUMPS_PATH = {
     'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
     'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
-    'ACL_v1_B32':   'pirineus3/2064866/2223546/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch19',
-    'ACL_v2_B16':   'pirineus3/2168632/2223544/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
-    'ACL_v3_B16':   'pirineus3/2210849/2223545/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch15',
-    'ACL_v4_B16':   'pirineus3/2271991/2223547/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch18',
-    'ACL_v5_B16':   'pirineus3/2568854/2223548/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
+    'ACDL_v1_B16':        '2074301-full-frank/2233673/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+    'ACDL_v2_B16':  '2153732/2233711/Visual_results_test/vggss/ADCL_ViT16_aclifa_2gpu/epoch18',
+    'ACDL_v3_B16':  '2224279/2230948/Visual_results_test/vggss/ADCL_ViT16-v2_aclifa_2gpu/epoch17',
 }
 
 IMAGE_FILENAME = "overlaid.jpg"   # which image to show in each cell
@@ -447,6 +455,7 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
             ax.set_xticks([]); ax.set_yticks([])
 
             img_path = os.path.join(best_dir, sample, img_filename) if best_dir else None
+            img_path = img_path.replace('heatmap', 'heatmap_v_d') if exp == 'frank' else img_path
             img, found = load_image_or_placeholder(img_path)
             ax.imshow(img, aspect='auto')
 
@@ -482,7 +491,7 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
     )
 
     fig.suptitle(
-        f"Qualitative results: ACL-SaN model comparison of overlaid heatmaps",
+        f"Qualitative results: ADCL model comparison of overlaid heatmaps",
         x=(label_w / fig_w + 0.99) / 2,
         y=1.0 - (top_h / fig_h) / 2,
         fontsize=11, fontweight='bold', color="#111111",

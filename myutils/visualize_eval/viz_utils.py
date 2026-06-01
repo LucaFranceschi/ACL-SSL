@@ -373,19 +373,24 @@ def boxplots_by_dataset_compare(
         raise Exception('Incorrect params')
     N = len(list_of_epochs)
 
-    fig, axs = plt.subplots(nrows=1, ncols=N, sharey=True, figsize=(1.5*N, 4))
+    fig, axs = plt.subplots(nrows=1, ncols=N, sharey=True, figsize=(1.7*N, 4))
 
     hue_order = ["pos", "sil", "noi", "off"]
     palette = sns.color_palette('pastel', n_colors=len(hue_order))
 
     for i in range(N):
+        seg_item_tmp = seg_item
+        # if list_of_experiments[i].name == 'frank':
+        if list_of_experiments[i].name == 'ADCL_v1_B16':
+            seg_item_tmp = 'v_d'
+
         ax = axs if N == 1 else axs[i]
 
         df = list_of_experiments[i].infer_info.copy()
         df = df[(df["dataset"] == dataset_name) &
                 (df["min_max"] == min_max) &
                 (df["epoch"] == list_of_epochs[i]) &
-                (df["seg_item"] == seg_item)]
+                (df["seg_item"] == seg_item_tmp)]
 
         df = df.explode("data")
 
@@ -398,8 +403,10 @@ def boxplots_by_dataset_compare(
             ax=ax,
             legend=False
         )
-
-        ax.set_title(f"{list_of_experiments[i].name.strip('ACL_')}@{list_of_epochs[i]}", fontsize=12)
+        title = list_of_experiments[i].name.replace('ACL_baseline', 'baseline')
+        if title.startswith('ADCL'):
+            title = title.replace('_B16', '')
+        ax.set_title(f"{title}@{list_of_epochs[i]}", fontsize=12)
         ax.set_ylim([0, 1])
 
         ep = list_of_epochs[i]
@@ -408,7 +415,7 @@ def boxplots_by_dataset_compare(
         except:
             pass
 
-        th_value = list_of_experiments[i].thresholds.get(ep, {}).get(seg_item, {}).get(th_name)
+        th_value = list_of_experiments[i].thresholds.get(ep, {}).get(seg_item_tmp, {}).get(th_name)
         if th_value is not None:
             ax.axhline(float(th_value), color='crimson', linestyle='--', linewidth=1.5)
             ax.text(0.5, -0.07, f'Thr={float(th_value):.3f}', transform=ax.transAxes, ha='center', va='bottom', fontsize=10, fontweight='bold', color='crimson')
