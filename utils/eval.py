@@ -536,14 +536,14 @@ def eval_vggss_get_thresholds(
             'max_neg': np.mean(max_negatives_m_i).round(4),
             'max_neg_plus_10': np.round(np.mean(max_negatives_m_i) * 1.1, 4),
             'max_q3_all': np.percentile(max_negatives_m_i, 75).round(4),
-            'max_q2_pos': np.percentile(outputs_max['positive']['m_i_seg'], 25).round(4),
+            'max_q1_pos': np.percentile(outputs_max['positive']['m_i_seg'], 25).round(4),
             'max_q3_separate': np.amax(max_negatives_separate_m_i).round(4),
         },
         'v_d': {
             'max_neg': np.mean(max_negatives_v_d).round(4),
             'max_neg_plus_10': np.round(np.mean(max_negatives_v_d) * 1.1, 4),
             'max_q3_all': np.percentile(max_negatives_v_d, 75).round(4),
-            'max_q2_pos': np.percentile(outputs_max['positive']['v_d_seg'], 25).round(4),
+            'max_q1_pos': np.percentile(outputs_max['positive']['v_d_seg'], 25).round(4),
             'max_q3_separate': np.amax(max_negatives_separate_v_d).round(4)
         }
     }
