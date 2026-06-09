@@ -381,7 +381,7 @@ def boxplots_by_dataset_compare(
     for i in range(N):
         seg_item_tmp = seg_item
         # if list_of_experiments[i].name == 'frank':
-        if list_of_experiments[i].name == 'ADCL_v1_B16':
+        if list_of_experiments[i].name == 'ADCL_vA_B16':
             seg_item_tmp = 'v_d'
 
         ax = axs if N == 1 else axs[i]

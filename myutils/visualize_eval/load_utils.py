@@ -152,7 +152,7 @@ def load_infer_info(path, run_name):
 #             thresh_for_seg_item = {
 #                 'max_neg': np.mean(max_negatives),
 #                 'max_neg_plus_10': np.mean(max_negatives) * 1.1,
-#                 'max_q2_pos': np.percentile(list(pos_arr), 25),
+#                 'max_q1_pos': np.percentile(list(pos_arr), 25),
 #                 'max_q3_all': np.percentile(max_negatives, 75),
 #                 'max_q3_separate': np.max(max_negatives_separate)
 #             }

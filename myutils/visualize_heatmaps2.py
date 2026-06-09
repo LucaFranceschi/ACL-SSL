@@ -53,13 +53,13 @@ ROOT = "train_outputs"   # path to the train_outputs directory
 #     'ACL_v5_B16':   'pirineus3/2568854/2223548/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
 # }
 
-EXP_DUMPS_PATH = {
-    'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
-    'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
-    'ACDL_v1_B16':        '2074301-full-frank/2233673/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
-    'ACDL_v2_B16':  '2153732/2233711/Visual_results_test/vggss/ADCL_ViT16_aclifa_2gpu/epoch18',
-    'ACDL_v3_B16':  '2224279/2230948/Visual_results_test/vggss/ADCL_ViT16-v2_aclifa_2gpu/epoch17',
-}
+# EXP_DUMPS_PATH = {
+    # 'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
+    # 'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+    # 'ACDL_v1_B16':        '2074301-full-frank/2233673/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+    # 'ACDL_v2_B16':  '2153732/2233711/Visual_results_test/vggss/ADCL_ViT16_aclifa_2gpu/epoch18',
+    # 'ACDL_v3_B16':  '2224279/2230948/Visual_results_test/vggss/ADCL_ViT16-v2_aclifa_2gpu/epoch17',
+# }
 
 IMAGE_FILENAME = "overlaid.jpg"   # which image to show in each cell
 
@@ -300,6 +300,33 @@ def open_popup(sample_id, exp_names, best_dirs, img_filename, audio_path):
     win.lift()
     win.focus_force()
 
+def center_crop_and_rescale(img_path, target_width, target_height):
+    """
+    Load an image, center-crop it to a square, and rescale to target dimensions.
+    Returns numpy array normalized to [0, 1].
+    """
+    if not img_path or not os.path.isfile(img_path):
+        return None, False
+    try:
+        img = Image.open(img_path)
+
+        # Center crop to square
+        left = 0
+        top = 233
+        right = 224
+        bottom = 457
+        img_cropped = img.crop((left, top, right, bottom))
+
+        # Rescale to target dimensions
+        img_cropped = img_cropped.resize((target_width, target_height), Image.LANCZOS)
+
+        # Convert to numpy array
+        img_array = np.array(img_cropped, dtype=np.float32) / 255.0
+        return img_array, True
+    except Exception as e:
+        print(f"Error loading/processing {img_path}: {e}")
+        return None, False
+
 # ---------------------------------------------------------------------------
 # Main plotting logic (your original, with click handler added)
 # ---------------------------------------------------------------------------
@@ -347,9 +374,9 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
         waveform_aspect = 4.0   # fallback if no waveform found
     wave_row_h = cell_w / waveform_aspect   # height that preserves ratio given cell_w
 
-    n_rows_total = 2 + n_exp   # waveform + frame + experiments
+    n_rows_total = 3 + n_exp   # waveform + frame + experiments
 
-    row_heights = [frame_row_h, wave_row_h] + [cell_h] * n_exp
+    row_heights = [frame_row_h, wave_row_h, cell_h] + [cell_h] * n_exp
 
     fig_w = label_w + n_cols * cell_w
     fig_h = top_h   + sum(row_heights)
@@ -385,6 +412,7 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
 
         img, found = load_image_or_placeholder(img_path)
         ax.imshow(img, aspect='auto')   # stretch to fill
+        ax.set_title(f"{sample[:7]} #{c+1}", fontsize=8, fontweight='bold', color="#222222", pad=4)
         if not found:
             ax.text(0.5, 0.5, "—", transform=ax.transAxes,
                     ha='center', va='center', fontsize=10, color="#aaaaaa")
@@ -444,10 +472,41 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
     )
 
     # ------------------------------------------------------------------
-    # Rows 2..  — experiment heatmaps  (unchanged logic)
+    # Row 2 — overall.png  (center crop to square, keep aspect ratio)
+    # ------------------------------------------------------------------
+    for c, sample in enumerate(all_samples):
+        ax = axes[2, c]
+        ax.set_xticks([]); ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#cccccc"); spine.set_linewidth(0.4)
+
+        img_path = None
+        for e in exp_names:
+            bd = best_dirs.get(e)
+            if bd:
+                p = os.path.join(bd, sample, "overall.jpg")
+                if os.path.isfile(p):
+                    img_path = p; break
+
+        img, found = center_crop_and_rescale(img_path, POPUP_IMG_W, POPUP_IMG_W)
+        if found:
+            ax.imshow(img, aspect='auto')
+        else:
+            img, _ = load_image_or_placeholder(None)
+            ax.imshow(img, aspect='auto')
+            ax.text(0.5, 0.5, "—", transform=ax.transAxes,
+                    ha='center', va='center', fontsize=10, color="#aaaaaa")
+
+    axes[2, 0].set_ylabel(
+        "Ground\nTruth", fontsize=8, fontweight='bold', rotation=0,
+        labelpad=4, ha='right', va='center', color="#222222"
+    )
+
+    # ------------------------------------------------------------------
+    # Rows 3..  — experiment heatmaps  (unchanged logic)
     # ------------------------------------------------------------------
     for r, exp in enumerate(exp_names):
-        row_idx  = r + 2
+        row_idx  = r + 3
         best_dir = best_dirs.get(exp)
 
         for c, sample in enumerate(all_samples):
@@ -490,13 +549,13 @@ def plot_grid(root: str, img_filename: str, output_path: str, mode,
         hspace=0.08,
     )
 
-    fig.suptitle(
-        f"Qualitative results: ADCL model comparison of overlaid heatmaps",
-        x=(label_w / fig_w + 0.99) / 2,
-        y=1.0 - (top_h / fig_h) / 2,
-        fontsize=11, fontweight='bold', color="#111111",
-        va='center',
-    )
+    # fig.suptitle(
+    #     f"Qualitative results: ADCL model comparison of overlaid heatmaps",
+    #     x=(label_w / fig_w + 0.99) / 2,
+    #     y=1.0 - (top_h / fig_h) / 2,
+    #     fontsize=11, fontweight='bold', color="#111111",
+    #     va='center',
+    # )
 
     def on_click(event):
         if event.inaxes is None or event.inaxes not in axes_map:
@@ -522,6 +581,7 @@ if __name__ == "__main__":
     parser.add_argument("--out",      default="heatmap_grid.png", help="Output PNG path")
     parser.add_argument("--max-cols", type=int, default=None,     help="Limit number of sample columns shown")
     parser.add_argument("--dpi",      type=int, default=300,      help="Output DPI (default: 300)")
+    parser.add_argument("--model", type=str, required=True)
     parser.add_argument(
         "--mode",
         choices=["best", "worst"],
@@ -529,6 +589,25 @@ if __name__ == "__main__":
         help="Whether to process best or worst samples"
     )
     args = parser.parse_args()
+
+    if args.model == 'ACL':
+        EXP_DUMPS_PATH = {
+        'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
+        'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+        'ACL_v1_B32':   'pirineus3/2064866/2223546/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch19',
+        'ACL_v2_B16':   'pirineus3/2168632/2223544/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
+        'ACL_v3_B16':   'pirineus3/2210849/2223545/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch15',
+        'ACL_v4_B16':   'pirineus3/2271991/2223547/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch18',
+        'ACL_v5_B16':   'pirineus3/2568854/2223548/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch16',
+        }
+    elif args.model == 'ADCL':
+        EXP_DUMPS_PATH = {
+            'ACL_baseline': '2223542/Visual_results_test/vggss/ACL_ViT16_Exp_ACL_v1/epochbest',
+            'ACL_v1_B16':   '2074301-full/2223543/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+            'ACDL_vA_B16':        '2074301-full-frank/2233673/Visual_results_test/vggss/ACL_ViT16_aclifa_2gpu/epoch17',
+            'ACDL_vB_B16':  '2153732/2233711/Visual_results_test/vggss/ADCL_ViT16_aclifa_2gpu/epoch18',
+            'ACDL_vC_B16':  '2224279/2230948/Visual_results_test/vggss/ADCL_ViT16-v2_aclifa_2gpu/epoch17',
+        }
 
     plot_grid(
         root=args.root,
