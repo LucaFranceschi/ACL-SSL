@@ -21,8 +21,11 @@ COLOR_PALETTE = {
     'vggsound': '#7f7f7f',
 }
 
-def print_metrics(df, epoch, thr:str='0.5', seg_item='m_i'):
+def print_metrics(df, epoch, thr:str='0.5', seg_item='m_i', snr=False) -> pd.DataFrame | None:
     filtered_df = df[df['epoch'] == epoch].copy()
+
+    if len(filtered_df) == 0:
+        return None
 
     filtered_df = filtered_df[
         (filtered_df['threshold'] == thr) &
@@ -35,32 +38,57 @@ def print_metrics(df, epoch, thr:str='0.5', seg_item='m_i'):
     # columns: what you want as side-by-side columns
     # values: the numbers to fill the table
     pivot_df = filtered_df.pivot_table(
-        index=['dataset', 'epoch'],
-        columns=['audio_type', 'metric'],
+        index=['epoch', 'dataset'],
+        columns=['audio_type', 'metric'] if not snr else ['audio_type', 'snr', 'metric'],
         values='value',
     )
 
     # Define the desired order for each audio_type
-    # std_cols = [('pos', m) for m in ['cIoU_hat', 'AUC', 'mIoU', 'Fmeasure']]
-    std_cols = [('pos', m) for m in ['cIoU_hat', 'AUC']]
-    silence_cols = [('sil', m) for m in ['pIA_hat', 'AUC_N']]
-    noise_cols = [('noi', m) for m in ['pIA_hat', 'AUC_N']]
+    if not snr:
+        std_cols = [('pos', m) for m in ['cIoU_hat', 'AUC']]
+        silence_cols = [('sil', m) for m in ['pIA_hat', 'AUC_N']]
+        noise_cols = [('noi', m) for m in ['pIA_hat', 'AUC_N']]
+        offscreen_cols = [('off', m) for m in ['pIA_hat', 'AUC_N']]
+    else:
+        std_cols = [('pos', s, m) for s in [-1, 20.0, 10.0, 5.0] for m in ['cIoU_hat', 'AUC']]
+        silence_cols = [('sil', -1, m) for m in ['pIA_hat', 'AUC_N']]
+        noise_cols = [('noi', -1, m) for m in ['pIA_hat', 'AUC_N']]
+        offscreen_cols = [('off', -1, m) for m in ['pIA_hat', 'AUC_N']]
 
     # Combine them into one ordered list
-    target_columns = std_cols + silence_cols + noise_cols
+    target_columns = std_cols + silence_cols + noise_cols + offscreen_cols
 
     # Reindex the columns to the new order
     # errors='ignore' ensures it doesn't crash if a specific metric is missing for one type
     pivot_df = pivot_df.reindex(columns=target_columns)
+    # Order datasets with avatar_one above avatar_off
+    custom_order = [
+        'avatar_one_bb', 'avatar_one_seg',
+        'avatar_off_bb', 'avatar_off_seg',
+        'avs_ms3', 'avs_s4', 'flickr', 'vggss', 'exflickr', 'exvggss'
+    ]
+
+    # Create a mapping for sorting
+    dataset_order = {ds: i for i, ds in enumerate(custom_order)}
+
+    # Sort by the 'dataset' level (level 1) using the custom order
+    pivot_df = pivot_df.reindex(
+        sorted(pivot_df.index, key=lambda x: dataset_order.get(x[1], 999))
+    )
 
     pd.options.display.float_format = "{:,.3f}".format
     pd.options.display.max_columns = None
     pd.options.display.max_rows = None
     pd.options.display.width = 1000 # Increased width to prevent wrapping
+    # pivot_df.to_clipboard(header=True, sep='\t')
 
-    print(pivot_df)
+    # print(pivot_df)
+
+    # input() # to be able to copy-paste tables into sheets :)
+
     return pivot_df
 
+'''
 def print_metrics_noisy(df, epoch, thr:str='0.5', seg_item='m_i'):
 
     filtered_df = df[df['epoch'] == epoch].copy()
@@ -86,9 +114,10 @@ def print_metrics_noisy(df, epoch, thr:str='0.5', seg_item='m_i'):
     std_cols = [('pos', s, m) for s in [5.0, 10.0, 20.0, -1] for m in ['cIoU_hat', 'AUC']]
     silence_cols = [('sil', -1, m) for m in ['pIA_hat', 'AUC_N']]
     noise_cols = [('noi', -1, m) for m in ['pIA_hat', 'AUC_N']]
+    offscreen_cols = [('off', -1, m) for m in ['pIA_hat', 'AUC_N']]
 
     # Combine them into one ordered list
-    target_columns = std_cols + silence_cols + noise_cols
+    target_columns = std_cols + silence_cols + noise_cols + offscreen_cols
 
     # Reindex the columns to the new order
     # errors='ignore' ensures it doesn't crash if a specific metric is missing for one type
@@ -101,6 +130,7 @@ def print_metrics_noisy(df, epoch, thr:str='0.5', seg_item='m_i'):
 
     print(pivot_df)
     return pivot_df
+'''
 
 def print_runs(df, thr=0.5):
     filtered_df = df[
@@ -295,7 +325,7 @@ def boxplots_by_dataset(infer_info_df, dataset_name, threshold_dict, epochs, th_
     fig = sns.catplot(df,
         y='data',
         hue='audio_type',
-        hue_order=["pos", "sil", "noi"],
+        hue_order=["pos", "sil", "noi", 'off'],
         kind="box",
         palette='pastel',
         col='epoch',
@@ -304,14 +334,25 @@ def boxplots_by_dataset(infer_info_df, dataset_name, threshold_dict, epochs, th_
         aspect=0.5,
     )
 
+    # Remove the auto-generated legend
+    if fig._legend:
+        fig._legend.remove()
+
     for ax, epoch in zip(fig.axes.flat, col_order):
-        th_value = threshold_dict.get(int(epoch), {}).get(seg_item, {}).get(th_name)
-        print(threshold_dict.get(int(epoch), {}).get(seg_item, {}))
+        ax.set_ylim([0, 1])
+        th_value = threshold_dict.get(epoch, {}).get(seg_item, {}).get(th_name)
         if th_value is not None:
             ax.axhline(float(th_value), color='crimson', linestyle='--', linewidth=1.5)
+            ax.text(0.5, 1.02, f'Thr = {float(th_value):.3f}', transform=ax.transAxes, ha='center', va='bottom', fontsize=8, color='black')
 
     plt.suptitle(f'{experiment_name}: {dataset_name} ({seg_item} - {th_name}_{min_max})')
-    sns.move_legend(fig, loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=3, title=None, frameon=False)
+
+    hue_order = ["pos", "sil", "noi", 'off']
+    palette = sns.color_palette('pastel', n_colors=len(hue_order))
+    legend_elements = [Patch(facecolor=palette[i], label=hue_order[i]) for i in range(len(hue_order))]
+    legend_elements.append(Line2D([0], [0], color='crimson', linestyle='--', linewidth=1.5, label=th_name))
+
+    fig.figure.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=5, title=None, frameon=False)
     fig.set_titles(y=-0.1)
 
     plt.tight_layout()
@@ -332,19 +373,24 @@ def boxplots_by_dataset_compare(
         raise Exception('Incorrect params')
     N = len(list_of_epochs)
 
-    fig, axs = plt.subplots(nrows=1, ncols=N, sharey=True, figsize=(1.5*N, 4))
+    fig, axs = plt.subplots(nrows=1, ncols=N, sharey=True, figsize=(1.7*N, 4))
 
-    hue_order = ["pos", "sil", "noi"]
+    hue_order = ["pos", "sil", "noi", "off"]
     palette = sns.color_palette('pastel', n_colors=len(hue_order))
 
     for i in range(N):
+        seg_item_tmp = seg_item
+        # if list_of_experiments[i].name == 'frank':
+        if list_of_experiments[i].name == 'ADCL_vA_B16':
+            seg_item_tmp = 'v_d'
+
         ax = axs if N == 1 else axs[i]
 
         df = list_of_experiments[i].infer_info.copy()
         df = df[(df["dataset"] == dataset_name) &
                 (df["min_max"] == min_max) &
                 (df["epoch"] == list_of_epochs[i]) &
-                (df["seg_item"] == seg_item)]
+                (df["seg_item"] == seg_item_tmp)]
 
         df = df.explode("data")
 
@@ -357,13 +403,22 @@ def boxplots_by_dataset_compare(
             ax=ax,
             legend=False
         )
-
-        ax.set_title(f"{list_of_experiments[i].name}@{list_of_epochs[i]}", fontsize=12)
+        title = list_of_experiments[i].name.replace('ACL_baseline', 'baseline')
+        if title.startswith('ADCL'):
+            title = title.replace('_B16', '')
+        ax.set_title(f"{title}@{list_of_epochs[i]}", fontsize=12)
         ax.set_ylim([0, 1])
 
-        th_value = list_of_experiments[i].thresholds.get(int(list_of_epochs[i]), {}).get(seg_item, {}).get(th_name)
+        ep = list_of_epochs[i]
+        try:
+            ep = int(list_of_epochs[i])
+        except:
+            pass
+
+        th_value = list_of_experiments[i].thresholds.get(ep, {}).get(seg_item_tmp, {}).get(th_name)
         if th_value is not None:
             ax.axhline(float(th_value), color='crimson', linestyle='--', linewidth=1.5)
+            ax.text(0.5, -0.07, f'Thr={float(th_value):.3f}', transform=ax.transAxes, ha='center', va='bottom', fontsize=10, fontweight='bold', color='crimson')
 
     legend_elements = [Patch(facecolor=palette[i], label=hue_order[i]) for i in range(len(hue_order))]
     legend_elements.append(Line2D([0], [0], color='crimson', linestyle='--', linewidth=1.5, label=th_name))
@@ -371,15 +426,8 @@ def boxplots_by_dataset_compare(
     fig.legend(
         handles=legend_elements,
         loc='lower center',
-        bbox_to_anchor=(0.5, -0.05),
-        ncol=4,
+        bbox_to_anchor=(0.5, -0.1),
+        ncol=5,
         frameon=False
     )
-
-    # Add global title
-    fig.suptitle(f'{dataset_name} ({seg_item} - {min_max})', fontsize=14, fontweight='bold')
-
-    plt.tight_layout()
-    os.makedirs(f'outputs/{experiment_name}', exist_ok=True)
-    fig.savefig(f"outputs/{int(datetime.timestamp(datetime.now()))}.png", bbox_inches='tight', dpi=300)
-    plt.show()
+    return fig

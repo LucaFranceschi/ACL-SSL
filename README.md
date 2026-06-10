@@ -1,134 +1,53 @@
-# Audio-Grounded Contrastive Learning (WACV’24)
+# Towards Robust Visual Sound Source Localization
 
-Official pytorch implementation of out paper:
-
->  **[Can CLIP Help Sound Source Localization?](https://arxiv.org/abs/2311.04066)**
+> **Assessing and Enhancing the ACL-SSL Framework with Negative Audio Samples**
 >
-> [Sooyoung Park*](https://sites.google.com/view/sooyoungpark), [Arda Senocak*](https://ardasnck.github.io/), [Joon Son Chung](https://mmai.io/joon/) (* Equal Contribution)
+> Undergraduate Thesis — *Luca Franceschi*, *Universitat Pompeu Fabra*, *2026*
 >
->  WACV 2024
+> Forked from [ACL-SSL](https://github.com/swimmiing/ACL-SSL) (Park et al., WACV 2024)
 
+---
 
-## Introduction
+## Overview
 
-<img src="./asset/summary_wacv.png" alt="image" width="100%">
+**Visual Sound Source Localization (VSSL)** identifies spatial regions in images or videos that correspond to sound sources in the accompanying audio stream. While existing methods achieve strong benchmark results, they struggle with *negative audio samples* — silence, noise, and offscreen sounds — due to a lack of mechanisms that suppress false positive activations.
 
-This repo is pytorch implementation of Audio-Grounded Contrastive Learning (ACL). Code is very simple and easy to understand fastly.
+This thesis addresses these limitations in the ACL-SSL framework through two contributions:
 
-Some of these codes are based on [AudioToken](https://github.com/guyyariv/AudioToken), [BEATs](https://github.com/microsoft/unilm/tree/master/beats), [TCL](https://github.com/kakaobrain/tcl).
+1. **ACL-SaN** — a Silence-and-Noise aware training objective that explicitly penalizes false positive activations on negative audio inputs.
+2. **Grounder ablation** — an ablation study on ACL-SSL's CLIPSeg-based Audio-Visual Grounder, assessing the feasibility of a fully self-supervised alternative.
 
-Demo: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/swimmiing/ACL-SSL-zeroshot-demo)
+![Samples showing improvement of ACL-SaN model over baseline](assets/3-qual_pos_impr.jpg)
 
-## Required packages
+## Environment
 
-- Python = 3.10.8
-- Pytorch = 1.13.0
-- transformers = 4.25.1
+All the dependencies are listed in the [environment.yaml](environment.yaml) file. The environment can be built with the Singularity [container definition file](container.def) or through any other means.
 
-### Installation
+## Datasets
 
-```bash
-$ conda install -c nvidia cudatoolkit=11.7
-$ conda install -c conda-forge cudnn
-$ conda install python=3.10
-$ pip install torch==1.13.0+cu117 torchvision==0.14.0+cu117 torchaudio==0.13.0 --extra-index-url https://download.pytorch.org/whl/cu117
-$ pip install tensorboard
-$ pip transformers==4.25.1
-$ pip install opencv-python
-$ pip install tqdm
-$ pip install scikit-learn
+| Dataset | Usage | Link |
+|---|---|---|
+| VGG-Sound | Training | [Link](https://www.robots.ox.ac.uk/~vgg/data/vggsound/) |
+| AVATAR | Evaluation | [Link](https://hahyeon610.github.io/Video-centric_Audio_Visual_Localization/) |
+| AVSBench | Evaluation | [Link](https://github.com/OpenNLPLab/AVSBench) |
+| VGG-SS | Evaluation | [Link](https://www.robots.ox.ac.uk/~vgg/research/lvs/) |
+| Flickr-SoundNet | Evaluation | [Link](https://github.com/ardasnck/learning_to_localize_sound_source) |
+| Extended VGG-SS / Flickr | Evaluation | [Link](https://github.com/stoneMo/SLAVC) |
 
-```
+Inside each dataset directory there are scripts to help extract the datasets into its place that may be helpful.
 
-## Data preparation
+## Training and Evaluation
 
-**Important Note:** All audio samples must be converted to 16kHz, and for detailed instructions, refer to the readme in each dataset-specific directory.
+Multiple training and evaluation scripts can be found in the [scripts](scripts/) directory.
 
-- **Dataset**
-    - VGG-Sound: [[Link]](https://www.robots.ox.ac.uk/~vgg/data/vggsound/)
-        - VGG-SS: [[Link]](https://www.robots.ox.ac.uk/~vgg/research/lvs/)
-    - Flickr: [[Link]](https://github.com/ardasnck/learning_to_localize_sound_source)
-    - AVSBench: [[Link]](http://www.avlbench.opennlplab.cn/dataset/avsbench)
-    - Extended VGG-SS/Flickr: [[Link]](https://github.com/stoneMo/SLAVC)
+## Results
 
-## Model preparation
+![Boxplot showing separation between positive and negative audio samples](assets/3-box_comparison.png)
 
-Downloading pretrained model (audio backbone) in pretrain folder
-- BEATs: https://github.com/microsoft/unilm/tree/master/beats
-  - BEATs_iter3_plus_AS2M_finedtuned_on_AS2M_cpt2.pt
+### Comparison between baseline and best trained model
 
+**ACL-SSL**
+![Baseline heatmaps on negative audio samples](assets/1-san_grid.png)
 
-## Training
-
-- Ensure that you check the .sh files and set the `$ export CUDA_VISIBLE_DEVICES=”**”` according to your hardware setup.
-- Make sure that `—model_name` corresponds to the configuration file located at `./config/model/{-model_name}.yaml`.
-- Model files (.pth) will be saved in the directory `{—save_path}/Train_record/{-model_name}_{-exp_name}/`.
-- Review the configuration settings in `./config/train/{-train_config}.yaml` to ensure they match your training requirements.
-- Choose one of the following methods to initiate training:
-
-```bash
-$ sh SingleGPU_Experiment.sh. # For single GPU setup
-$ sh Distributed_Experiment.sh. # For multi-GPU setup (DDP)
-```
-
-## Test
-
-- Before testing, please review the .sh file and set the `$ export CUDA_VISIBLE_DEVICES=”**”` environment variable according to your hardware configuration.
-- Ensure that the `—model_name` parameter corresponds to the configuration file located at `./config/model/{-model_name}.yaml`.
-- Model files (.pth) located in the directory `{—save_path}/{-model_name}_{-exp_name}/Param_{-epochs}.pth` will be used for testing.
-- The `—epochs` parameter can accept either an integer or a list of integers (e.g., 1, 2, 3).
-- If `—epochs` is left unspecified (null), the default model file `{—save_path}/Train_record/{-model_name}_{-exp_name}/Param_best.pth` will be used for testing.
-
-```bash
-$ sh Test_PTModels
-```
-
-## P**retrained models**
-
-**Important Note:** After downloading the Param_best.pth file, move it to the directory `{—save_path}/{-model_name}_{-exp_name}/` before use.
-
-- VGG-Sound 144k trained model: [[Link]](https://drive.google.com/file/d/1XnVrBES3IKjAcV0uCkvbIdEEclcOYJoR/view?usp=drive_link)
-  - This model was trained using a 2-GPU setup.
-  - The reported numbers are the highest, with performance varying across different seeds, and the provided .pth link corresponds to the checkpoint used for the highest result.
-
-## **Citation**
-
-If you use this project, please cite this project as:
-
-```latex
-@inproceedings{park2023clip,
-      title={Can CLIP Help Sound Source Localization?},
-      author={Sooyoung Park and Arda Senocak and Joon Son Chung},
-      journal = {arXiv preprint arXiv:2311.04066},
-      year={2023},
-}
-```
-
-# Repository layout
-```
-.
-├── README.md
-├── asset
-├── config
-│   ├── model
-│   │   └── ACL_ViT16.yaml
-│   └── train
-│       ├── Exp_ACL_latest.yaml
-│       ├── Exp_ACL_v1.yaml
-│       ├── Exp_ACL_v2.yaml
-│       ├── Exp_ACL_v3.yaml
-│       ├── Exp_ACL_v4.yaml
-│       ├── Exp_ACL_v5.yaml
-│       └── Exp_ACL_v6.yaml
-├── container.def
-├── datasets
-├── environment.yaml
-├── eval_ACL.py
-├── eval_noisy_audio_samples.py
-├── evaluate_models.py
-├── modules
-├── myutils
-├── scripts
-├── train_ACL.py
-└── utils
-```
+**ACL-SaN (v5)**
+![Final ACL-SaN version heatmaps on negative audio samples](assets/3-san_grid_v5.png)

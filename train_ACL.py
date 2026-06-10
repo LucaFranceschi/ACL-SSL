@@ -26,6 +26,7 @@ from datasets.vggsound.VGGSound_Dataset import VGGSoundDataset
 from datasets.silence_and_noise.silence_and_noise import get_silence_noise_audios
 from utils.eval import eval_vggsound_validation
 
+from modules.arg_utils import create_param_groups_with_sigmoid_lr
 
 def main(model_name, model_path, exp_name, train_config_name, data_path_dict, save_path, recover_from = None):
     """
@@ -116,7 +117,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     ''' Optimizer '''
     module_path, module_name = args.optim.pop('module_path'), args.optim.pop('module_name')
-    optimizer = getattr(import_module(module_path), module_name)(model.parameters(), **args.optim)
+
+    # Create parameter groups with different learning rates for sigmoid parameters
+    sigmoid_lr_scale = getattr(args, 'sigmoid_lr_scale', 0.1)  # default 10% of base LR
+    param_groups = create_param_groups_with_sigmoid_lr(model, args.optim['lr'], sigmoid_lr_scale)
+    args.optim.pop('lr')  # Remove lr from optim dict since we're handling it in param_groups
+    optimizer = getattr(import_module(module_path), module_name)(param_groups, **args.optim)
 
     ''' Scheduler '''
     scheduler = None
@@ -237,9 +243,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
             if scaler is None:
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
             else:
                 scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)  # Unscale before clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
 

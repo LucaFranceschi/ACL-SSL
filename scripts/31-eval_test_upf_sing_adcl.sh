@@ -1,6 +1,7 @@
 #!/bin/bash
 
 EXPERIMENT_VERSION=$1
+JOB_ID=$2
 
 echo "SLURM_VISIBLE_DEVICES: $SLURM_JOB_GPUS"
 echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
@@ -9,27 +10,21 @@ nvidia-smi
 
 REPO="/home/lfranceschi/repos/ACL-SSL"
 DATA=$REPO/datasets
-SAVE_PATH=$REPO/train_outputs/$SLURM_JOBID
+SAVE_PATH=$REPO/train_outputs/$JOB_ID/$SLURM_JOBID
 
 cd $REPO
 
 mkdir -p $SAVE_PATH
 
-set -a; source config/.env; set +a
-
-# python \
-python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port 12345 \
-train_ACL.py \
+python -m torch.distributed.launch --nnodes=1 --nproc_per_node=2 --master_port 12345 extract_univ_th_ACL.py \
 --model_name ADCL_ViT16-v2 \
 --model_path $REPO/pretrain \
---exp_name aclifa_2gpu \
 --train_config $EXPERIMENT_VERSION \
 --vggss_path $DATA/VGGSS \
 --flickr_path $DATA/Flickr \
 --avs_path $DATA/AVSBench/AVS1 \
 --vggsound_path $DATA/vggsound \
+--avatar_path $DATA/AVATAR \
 --san_path $DATA/silence_and_noise/audio \
---save_path $SAVE_PATH \
---wandb_logging
-
-# --recover_from $REPO/train_outputs/2103685/Train_record/ACL_ViT16_aclifa_2gpu/Param_13.pth \
+--model_weights $REPO/train_outputs/$JOB_ID \
+--save_path $SAVE_PATH

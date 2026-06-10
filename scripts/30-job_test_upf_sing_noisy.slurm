@@ -1,11 +1,10 @@
 #!/bin/bash
 
-#SBATCH --job-name=adcl-train
 #SBATCH --nodes 1
-#SBATCH --ntasks-per-node 2
+#SBATCH --ntasks-per-node 1
 #SBATCH --cpus-per-task 4
 #SBATCH --mem-per-cpu 16G
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --exclude="node025,node032"
 #SBATCH --output=outputs/slurm-%j.out
 #SBATCH --error=outputs/slurm-%j.err
@@ -16,9 +15,12 @@
 set -e
 
 EXPERIMENT_VERSION=$1
+PATH_TO_MODEL=$2
+PATH_TO_THRESHOLDS=$3
+EPOCHS=$4
 
 nvidia-smi
 echo SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST
 
 singularity run --nv --bind /home/lfranceschi/repos/ACL-SSL container.sif \
-/home/lfranceschi/repos/ACL-SSL/scripts/23-distributed_train_ADCL.sh $EXPERIMENT_VERSION
+/home/lfranceschi/repos/ACL-SSL/scripts/29-test_upf_sing_noisy.sh $EXPERIMENT_VERSION $PATH_TO_MODEL $PATH_TO_THRESHOLDS $EPOCHS

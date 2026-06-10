@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#SBATCH --job-name=adcl-train
 #SBATCH --nodes 1
 #SBATCH --ntasks-per-node 2
 #SBATCH --cpus-per-task 4
@@ -16,9 +15,10 @@
 set -e
 
 EXPERIMENT_VERSION=$1
+JOB_ID=$2
 
 nvidia-smi
 echo SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST
 
 singularity run --nv --bind /home/lfranceschi/repos/ACL-SSL container.sif \
-/home/lfranceschi/repos/ACL-SSL/scripts/23-distributed_train_ADCL.sh $EXPERIMENT_VERSION
+/home/lfranceschi/repos/ACL-SSL/scripts/31-eval_test_upf_sing_adcl.sh $EXPERIMENT_VERSION $JOB_ID

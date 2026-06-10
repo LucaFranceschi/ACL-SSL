@@ -1,7 +1,7 @@
 import torch
 import os
 import cv2
-
+import json
 import numpy as np
 
 from PIL import Image
@@ -536,14 +536,14 @@ def eval_vggss_get_thresholds(
             'max_neg': np.mean(max_negatives_m_i).round(4),
             'max_neg_plus_10': np.round(np.mean(max_negatives_m_i) * 1.1, 4),
             'max_q3_all': np.percentile(max_negatives_m_i, 75).round(4),
-            'max_q2_pos': np.percentile(outputs_max['positive']['m_i_seg'], 25).round(4),
+            'max_q1_pos': np.percentile(outputs_max['positive']['m_i_seg'], 25).round(4),
             'max_q3_separate': np.amax(max_negatives_separate_m_i).round(4),
         },
         'v_d': {
             'max_neg': np.mean(max_negatives_v_d).round(4),
             'max_neg_plus_10': np.round(np.mean(max_negatives_v_d) * 1.1, 4),
             'max_q3_all': np.percentile(max_negatives_v_d, 75).round(4),
-            'max_q2_pos': np.percentile(outputs_max['positive']['v_d_seg'], 25).round(4),
+            'max_q1_pos': np.percentile(outputs_max['positive']['v_d_seg'], 25).round(4),
             'max_q3_separate': np.amax(max_negatives_separate_v_d).round(4)
         }
     }
@@ -551,6 +551,13 @@ def eval_vggss_get_thresholds(
     print(return_thresholds)
 
     return return_thresholds
+
+def to_serializable(val):
+    if isinstance(val, list):
+        return [to_serializable(v) for v in val]
+    if hasattr(val, 'tolist'):  # Tensor or numpy array
+        return val.tolist()
+    return val
 
 @torch.no_grad()
 def eval_vggss_agg(
@@ -626,10 +633,14 @@ def eval_vggss_agg(
     evaluators_m_i = [vggss_eval.Evaluator() for i in range(len(thrs_m_i))]
     evaluators_v_d = [vggss_eval.Evaluator() for i in range(len(thrs_v_d))]
 
+    frame_names = []
+
     for step, data in enumerate(tqdm(test_dataloader, desc=f"Evaluate VGG-SS dataset ({test_split})...")):
         images, audios, bboxes = data['images'], data['audios'], data['bboxes']
         labels, name = data['labels'], data['ids']
         offscreen_audios = data.get('offscreen_audios', None)
+
+        frame_names += name
 
         audio_embeddings = {}
 
@@ -686,30 +697,30 @@ def eval_vggss_agg(
             evaluators_v_d[i].evaluate_batch(**heatmaps_v_d, target=bboxes, thr=thr)
 
         # Visual results
-        # for j in range(test_dataloader.batch_size):
-        #     seg = heatmaps['heatmap'][j:j+1]
-        #     seg_image = ((seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+        for j in range(test_dataloader.batch_size):
+            seg = heatmaps['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
 
-        #     os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
-        #     cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
+            os.makedirs(f'{result_dir}/heatmap', exist_ok=True)
+            cv2.imwrite(f'{result_dir}/heatmap/{name[j]}.jpg', seg_image)
 
-        # for j in range(test_dataloader.batch_size):
-        #     seg = heatmaps_v_d['heatmap'][j:j+1]
-        #     seg_image = ((seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
+        for j in range(test_dataloader.batch_size):
+            seg = heatmaps_v_d['heatmap'][j:j+1]
+            seg_image = ((1 - seg.squeeze().detach().cpu().numpy()) * 255).astype(np.uint8)
 
-        #     os.makedirs(f'{result_dir}/heatmap_v_d', exist_ok=True)
-        #     cv2.imwrite(f'{result_dir}/heatmap_v_d/{name[j]}.jpg', seg_image)
+            os.makedirs(f'{result_dir}/heatmap_v_d', exist_ok=True)
+            cv2.imwrite(f'{result_dir}/heatmap_v_d/{name[j]}.jpg', seg_image)
 
         # Overall figure
-        # for j in range(test_dataloader.batch_size):
-        #     original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.jpg')).resize(gt_resolution)
-        #     gt_image = vt.ToPILImage()(bboxes[j]).resize(gt_resolution).point(lambda p: 255 - p)
-        #     heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution)
-        #     seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution).point(
-        #         lambda p: 0 if p / 255 < 0.5 else 255)
+        for j in range(test_dataloader.batch_size):
+            original_image = Image.open(os.path.join(test_dataloader.dataset.image_path, name[j] + '.jpg')).resize(gt_resolution)
+            gt_image = vt.ToPILImage()(bboxes[j]).resize(gt_resolution).point(lambda p: 255 - p)
+            heatmap_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution)
+            seg_image = Image.open(f'{result_dir}/heatmap/{name[j]}.jpg').resize(gt_resolution).point(
+                lambda p: 0 if p / 255 < 0.5 else 255)
 
-        #     draw_overall(result_dir, original_image, gt_image, heatmap_image, seg_image, labels[j], name[j])
-        #     draw_overlaid(result_dir, original_image, heatmap_image, name[j])
+            draw_overall(result_dir, original_image, gt_image, heatmap_image, seg_image, labels[j], name[j])
+            draw_overlaid(result_dir, original_image, heatmap_image, name[j])
 
     if tensorboard_path is not None and epoch is not None:
         numpy_path = tensorboard_path.replace('tensorboard', 'numpy')
@@ -733,6 +744,21 @@ def eval_vggss_agg(
     os.makedirs(result_dir, exist_ok=True)
     rst_path = os.path.join(f'{result_dir}/', 'test_rst.txt')
     msg = ''
+
+    if tensorboard_path is not None:
+        dumps_path = tensorboard_path.replace('tensorboard', 'dumps')
+        os.makedirs(dumps_path, exist_ok=True)
+
+        with open(os.path.join(dumps_path, 'frame_names.txt'), 'w') as fp:
+            json.dump(frame_names, fp)
+
+        for i, thr in enumerate(thrs_m_i):
+            if thr == add_thresholds['m_i']['max_q3_separate']:
+                with open(os.path.join(dumps_path, 'pIAs_ordered_univ_m_i.txt'), 'w') as fp:
+                    json.dump(to_serializable(evaluators_m_i[i].std_metrics['pIA']), fp)
+
+                with open(os.path.join(dumps_path, 'cIoUs_ordered_univ_m_i.txt'), 'w') as fp:
+                    json.dump(to_serializable(evaluators_m_i[i].std_metrics['cIoU']), fp)
 
     # Final result
     best_AUC = [0.0, 0.0]
@@ -1021,7 +1047,7 @@ def eval_avsbench_agg(
                 writer.add_scalars(f'test/m_i_seg/off/avs/{test_split}({thr})', offscreen_metrics, epoch)
 
     for i, thr in enumerate(thrs_v_d):
-        std_metrics, silence_metrics, noise_metrics = evaluators_v_d[i].finalize()
+        std_metrics, silence_metrics, noise_metrics, offscreen_metrics = evaluators_v_d[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split} with thr = {thr})\n'
         msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
@@ -1394,7 +1420,12 @@ def eval_exvggss_agg(
         # Calculate confidence value for extended dataset
         v_f = model.encode_masked_vision(images.to(model.device), audio_driven_embedding)[0]
         ind = torch.arange(test_dataloader.batch_size).to(images.device)
-        confs = torch.cosine_similarity(v_f[ind, ind, :], audio_driven_embedding)
+        v_f_sim = out_dict['positive'].get('v_f_sim', None)
+        if v_f_sim is not None: # this means that the model is ACL
+            confs = torch.cosine_similarity(v_f[ind, ind, :], audio_driven_embedding)
+        else:
+            print(v_f.shape)
+            confs = v_f[ind, ind]
 
         # Evaluation for all thresholds
         for i, thr in enumerate(thrs_m_i):
@@ -1593,7 +1624,12 @@ def eval_exflickr_agg(
         # Calculate confidence value for extended dataset
         v_f = model.encode_masked_vision(images.to(model.device), audio_driven_embedding)[0]
         ind = torch.arange(test_dataloader.batch_size).to(images.device)
-        confs = torch.cosine_similarity(v_f[ind, ind, :], audio_driven_embedding)
+        v_f_sim = out_dict['positive'].get('v_f_sim', None)
+        if v_f_sim is not None: # this means that the model is ACL
+            confs = torch.cosine_similarity(v_f[ind, ind, :], audio_driven_embedding)
+        else:
+            print(v_f.shape)
+            confs = v_f[ind, ind]
 
         # Evaluation for all thresholds
         for i, thr in enumerate(thrs_m_i):
@@ -1950,8 +1986,8 @@ def eval_avatar_agg(
         std_metrics, silence_metrics, noise_metrics, offscreen_metrics = evaluators_m_i_seg[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr})\n'
-        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics.get("mIoU", None)=}, {std_metrics.get("Fmeasure", None)=}\n'
+        msg += f'{std_metrics.get("cIoU_ap50", None)=}, {std_metrics.get("AUC", None)=}, {std_metrics.get("cIoU_hat", None)=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/m_i_seg/pos{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_seg({thr})', std_metrics, epoch)
@@ -1977,8 +2013,8 @@ def eval_avatar_agg(
         std_metrics, silence_metrics, noise_metrics, offscreen_metrics = evaluators_m_i_bb[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr})\n'
-        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics.get("mIoU", None)=}, {std_metrics.get("Fmeasure", None)=}\n'
+        msg += f'{std_metrics.get("cIoU_ap50", None)=}, {std_metrics.get("AUC", None)=}, {std_metrics.get("cIoU_hat", None)=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/m_i_seg/pos{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_bb({thr})', std_metrics, epoch)
@@ -2005,8 +2041,8 @@ def eval_avatar_agg(
         std_metrics, silence_metrics, noise_metrics, offscreen_metrics = evaluators_v_d_seg[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split}_seg with thr = {thr})\n'
-        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics.get("mIoU", None)=}, {std_metrics.get("Fmeasure", None)=}\n'
+        msg += f'{std_metrics.get("cIoU_ap50", None)=}, {std_metrics.get("AUC", None)=}, {std_metrics.get("cIoU_hat", None)=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/v_d_seg/pos{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_seg({thr})', std_metrics, epoch)
@@ -2033,8 +2069,8 @@ def eval_avatar_agg(
         std_metrics, silence_metrics, noise_metrics, offscreen_metrics = evaluators_v_d_bb[i].finalize()
 
         msg += f'{model.__class__.__name__} ({test_split}_bb with thr = {thr})\n'
-        msg += f'{std_metrics["mIoU"]=}, {std_metrics["Fmeasure"]=}\n'
-        msg += f'{std_metrics["cIoU_ap50"]=}, {std_metrics["AUC"]=}, {std_metrics["cIoU_hat"]=}\n'
+        msg += f'{std_metrics.get("mIoU", None)=}, {std_metrics.get("Fmeasure", None)=}\n'
+        msg += f'{std_metrics.get("cIoU_ap50", None)=}, {std_metrics.get("AUC", None)=}, {std_metrics.get("cIoU_hat", None)=}\n'
 
         if tensorboard_path is not None and epoch is not None:
             writer.add_scalars(f'test/v_d_seg/pos{"_snr" + str(snr) if snr != None else ""}/avatar/{test_split}_bb({thr})', std_metrics, epoch)
