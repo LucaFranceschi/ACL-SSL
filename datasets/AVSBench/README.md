@@ -1,58 +1,19 @@
 # AVSBench dataset directory structure
 
 ```
-datasets/AVSBench/
-├── AVS1
-│   ├── ms3
-│   │   ├── audio_wav  [424 entries exceeds filelimit, not opening dir]
-│   │   ├── gt_masks  [2120 entries exceeds filelimit, not opening dir]
-│   │   └── visual_frames  [2120 entries exceeds filelimit, not opening dir]
-│   ├── rename_files.py
-│   ├── s4
-│   │   ├── audio_wav  [4932 entries exceeds filelimit, not opening dir]
-│   │   ├── gt_masks  [10852 entries exceeds filelimit, not opening dir]
-│   │   └── visual_frames  [24660 entries exceeds filelimit, not opening dir]
-│   └── unfold_dataset.sh
-├── AVSBench_Dataset.py
-├── README.md
-├── eval_utils.py
-├── metadata
-│   ├── avs1_ms3_test.csv
-│   └── avs1_s4_test.csv
-├── ms3_data
-│   ├── audio_log_mel
-│   │   ├── test  [64 entries exceeds filelimit, not opening dir]
-│   │   ├── train  [296 entries exceeds filelimit, not opening dir]
-│   │   └── val  [64 entries exceeds filelimit, not opening dir]
-│   ├── audio_wav
-│   │   ├── test  [64 entries exceeds filelimit, not opening dir]
-│   │   ├── train  [296 entries exceeds filelimit, not opening dir]
-│   │   └── val  [64 entries exceeds filelimit, not opening dir]
-│   ├── gt_masks
-│   │   ├── test  [64 entries exceeds filelimit, not opening dir]
-│   │   ├── train  [296 entries exceeds filelimit, not opening dir]
-│   │   └── val  [64 entries exceeds filelimit, not opening dir]
-│   ├── raw_videos  [424 entries exceeds filelimit, not opening dir]
-│   └── visual_frames  [424 entries exceeds filelimit, not opening dir]
-└── s4_data
-    └── s4_data
-        ├── audio_log_mel
-        │   ├── test  [23 entries exceeds filelimit, not opening dir]
-        │   ├── train  [23 entries exceeds filelimit, not opening dir]
-        │   └── val  [23 entries exceeds filelimit, not opening dir]
-        └── raw_videos
-            ├── test  [23 entries exceeds filelimit, not opening dir]
-            ├── train  [23 entries exceeds filelimit, not opening dir]
-            └── val  [23 entries exceeds filelimit, not opening dir]
-
-36 directories, 7 files
+[ 8.6G]  AVSBench
+├── [ 2.0M]  AVS1
+│   ├── [ 333M]  ms3/
+│   ├── [  655]  rename_files.py
+│   ├── [ 3.7G]  s4/
+│   └── [ 2.0K]  unfold_dataset.sh
+├── [ 7.0K]  AVSBench_Dataset.py
+├── [ 2.8K]  README.md
+├── [  13K]  eval_utils.py
+├── [ 145K]  metadata
+│   ├── [ 8.5K]  avs1_ms3_test.csv
+│   ├── [ 111K]  avs1_s4_test.csv
+│   └── [ 8.2K]  avs1_s4_test_subset.csv
+├── [ 682M]  ms3_data/
+└── [ 3.9G]  s4_data/
 ```
-
-All .wav files sampled 16k
-
-## Important
-Fix bug in official test code (Issue: F-Score results vary depending on the batch number)
-
-Considering the notable impact of this issue on the performance of self-supervised learning models, we suggest utilizing our updated test code.
-
-We already discussed this issue with the author who released the official code.

@@ -19,8 +19,6 @@ This thesis addresses these limitations in the ACL-SSL framework through two con
 
 ![Samples showing improvement of ACL-SaN model over baseline](assets/3-qual_pos_impr.jpg)
 
-## Project structure
-
 ## Environment
 
 All the dependencies are listed in the [environment.yaml](environment.yaml) file. The environment can be built with the Singularity [container definition file](container.def) or through any other means.
