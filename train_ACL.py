@@ -119,10 +119,12 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
     module_path, module_name = args.optim.pop('module_path'), args.optim.pop('module_name')
 
     # Create parameter groups with different learning rates for sigmoid parameters
-    sigmoid_lr_scale = getattr(args, 'sigmoid_lr_scale', 0.1)  # default 10% of base LR
-    param_groups = create_param_groups_with_sigmoid_lr(model, args.optim['lr'], sigmoid_lr_scale)
-    args.optim.pop('lr')  # Remove lr from optim dict since we're handling it in param_groups
-    optimizer = getattr(import_module(module_path), module_name)(param_groups, **args.optim)
+    sigmoid_lr_scale = getattr(args, 'sigmoid_lr_scale', None)  # default 10% of base LR
+    if sigmoid_lr_scale != None:
+        param_groups = create_param_groups_with_sigmoid_lr(model, args.optim['lr'], sigmoid_lr_scale)
+        args.optim.pop('lr')  # Remove lr from optim dict since we're handling it in param_groups
+        optimizer = getattr(import_module(module_path), module_name)(param_groups, **args.optim)
+    optimizer = getattr(import_module(module_path), module_name)(model.parameters(), **args.optim)
 
     ''' Scheduler '''
     scheduler = None
@@ -149,7 +151,11 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
     if recover_from != None:
         module.load(recover_from)
-        recovered_epoch = int(re.search(r'Param_(\d+).pth', recover_from).group(1))
+        print('Recovered from', recover_from)
+        try:
+            recovered_epoch = int(re.search(r'Param_(\d+).pth', recover_from).group(1))
+        except Exception as e:
+            recovered_epoch = -1
 
     validation_loss_list = []
     train_loss_list = []
@@ -243,12 +249,14 @@ def main(model_name, model_path, exp_name, train_config_name, data_path_dict, sa
 
             if scaler is None:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                if sigmoid_lr_scale != None:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
             else:
                 scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)  # Unscale before clipping
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                if sigmoid_lr_scale != None:
+                    scaler.unscale_(optimizer)  # Unscale before clipping
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 scaler.step(optimizer)
                 scaler.update()
 
