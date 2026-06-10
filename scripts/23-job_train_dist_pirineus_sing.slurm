@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=acl-train3
+#SBATCH --job-name=acl-train6
 #SBATCH --partition gpu
 #SBATCH --gres=gpu:h100:2
 #SBATCH --nodes 1
 #SBATCH --ntasks-per-node 2
 #SBATCH --cpus-per-task 32
-#SBATCH --time=10-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --output=outputs/slurm-%j.out
 #SBATCH --error=outputs/slurm-%j.err
 #SBATCH --mail-type=ALL
